@@ -5,7 +5,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Deep Neural Nets: 33 years ago and 33 years from now</title>
+    <title>DEEJ - Open Source Hardware Mixer</title>
     <meta name="viewport" content="width=device-width">
     <meta name="description" content="Musings of a Computer Scientist.">
     <link rel="canonical" href="http://karpathy.github.io/2022/03/14/lecun1989/">
@@ -33,7 +33,7 @@
 
   <div class="wrap">
 
-    <a class="site-title" href="/">We Must Know, We Shall Know</a>
+    <a class="site-title" href="./blog.html">We Must Know, We Shall Know</a>
     
 </header>
 
@@ -43,8 +43,8 @@
       <div class="post">
 
   <header class="post-header">
-    <h1>LLaVA - Large Language and Vision Assistant </h1>
-    <p class="meta">Sep 24, 2023</p>
+    <h1>DEEJ - Open Source Hardware Mixer</h1>
+    <p class="meta">Apr 23, 2024</p>
   </header>
 
   <article class="post-content">
@@ -59,8 +59,19 @@
 }
 </style>
 
-<p>Wir müssen wissen, wir werden wissen</p>
-
+<p>I stumbled upon something pretty cool recently that I thought I'd share with you all. It's called deej, and it's a DIY hardware volume mixer designed for people like me who wants a volume mixer but a MIDI controller is a lot for what the usage is so here it is <br><br> <a>https://github.com/omriharel/deej</a></p>
+<h3>Getting Down to Business</h3>
+<p>So, what's deej all about? Well, picture this: you're knee-deep in a gaming session, blasting your favourite tunes in the background, when suddenly, you realize you need to turn down the volume on your voice chat without tabbing out. Enter deej. This little contraption lets you control the volumes of different apps using real-life sliders – think DJ-style – without interrupting your flow. Pretty neat, right?</p>
+<h3>Building the Damn Device</h3>
+<p>Now, onto the nitty-gritty – building the hardware. As someone who's no stranger to tinkering with electronics, I gotta say, putting together the hardware for deej was a breeze. It's basically hooking up some slider potentiometers to an Arduino board and letting the magic happen. And don't worry if you're not a hardware whiz – the project documentation has got your back every step of the way.</p>
+<img src='./assets/DEEJ_SCHEMATICS.png', width='100%'>
+<h3>Tinkering with Software:</h3>
+<p>Once the hardware was up and running, it was time to dive into the software side of things. Configuring deej is a piece of cake – just whip up a simple YAML file to map sliders to your favorite apps and devices, and you're good to go. The lightweight desktop client, written in Go and a simple ass arduino code that converts all the analog signals from the potentiometers to sweet digital signals [0-1024], plays nice with your system and gives you real-time control over app volumes !</p>
+<h3>Experience</h3>
+<p>There is something satisfying about tweaking the volume with a physical slider, the software seems a little laggy at times, it does not auto detect the contorller after re-connecting it - nothing that cannot be changed with a few lines of GO code, the hardware can become a pain sometimes if the potentiometers are not the best quality available specially the one that rotates there can be a lot of signal errors that comes with it, but overall given the thing is opensource and you can just improve on whatever you want the thing is a beast !</p>
+<img src='./assets/DEEJ_CONTROLLER.jpg', width='100%'>
+<p>My DEEJ controller is just a random box with all the electronics (I should learn CAD and get a 3D printer), I have controllers for <b>Brave</b>, <b>Spotify</b>, <b>Discord</b> and some extra controllers for <b>Master</b> which is basically for every process and <b>MISC</b> which is for everything except <b>Brave</b>,<b>Spotify</b> and <b>Discord</b>.</p>
+<p><i>Disclaimer: The opinions expressed in this review are solely my own and do not reflect the views of any organization or entity.</i></p>
 
     </body>
 </html>
