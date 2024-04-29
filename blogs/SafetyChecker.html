@@ -9,6 +9,8 @@
     <meta name="description" content="Musings of a Computer Scientist.">
     <link rel="canonical" href="http://karpathy.github.io/2022/03/14/lecun1989/">
     <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Andrej Karpathy blog posts" />
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
     <!-- Custom CSS -->
     <link rel="stylesheet" href="main.css">
@@ -65,11 +67,12 @@
 <center>
 <blockquote class="twitter-tweet" data-theme="dark"><p lang="en" dir="ltr" width=100%>SDXLs, Did you ever stop to think about the safety checks on these things? Of course not, you&#39;re too busy making anime portraits. Well let me enlighten you - their &#39;safety&#39; is an embarrassing joke. A Thread - 1/N<a href="https://twitter.com/hashtag/SDXL?src=hash&amp;ref_src=twsrc%5Etfw">#SDXL</a> <a href="https://twitter.com/hashtag/SD15?src=hash&amp;ref_src=twsrc%5Etfw">#SD15</a> <a href="https://twitter.com/hashtag/AI?src=hash&amp;ref_src=twsrc%5Etfw">#AI</a> <a href="https://twitter.com/hashtag/AIart?src=hash&amp;ref_src=twsrc%5Etfw">#AIart</a></p>&mdash; Shauray (e/acc) (@Shauray7) <a href="https://twitter.com/Shauray7/status/1778753104839610761?ref_src=twsrc%5Etfw">April 12, 2024</a></blockquote> <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
 </center>
-<p>$x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}$</p>
-<h3>Getting Down to Business</h3>
-<p>So, what's deej all about? Well, picture this: you're knee-deep in a gaming session, blasting your favourite tunes in the background, when suddenly, you realize you need to turn down the volume on your voice chat without tabbing out. Enter deej. This little contraption lets you control the volumes of different apps using real-life sliders – think DJ-style – without interrupting your flow. Pretty neat, right?</p>
-<h3>Building the Damn Device</h3>
-<p>Now, onto the nitty-gritty – building the hardware. As someone who's no stranger to tinkering with electronics, I gotta say, putting together the hardware for deej was a breeze. It's basically hooking up some slider potentiometers to an Arduino board and letting the magic happen. And don't worry if you're not a hardware whiz – the project documentation has got your back every step of the way.</p>
+<h3>Introduction</h3>
+<p>In the world of AI, where algorithms roam freely, safety checkers stand as gatekeepers, tasked with filtering out the undesirable and preserving the sanctity of our digital spaces. However, beneath their seemingly straightforward task lies a realm of under-engineered piece of garbage. Here we delve deep into the mathematical underpinnings while exploring the theoretical foundations that underlie their operation.</p>
+<h3>Mathematical Framework:</h3>
+<p>At the heart of safety checkers lies the mathematical machinery that drives their decision-making process. Central to this framework are CLIP embeddings, which serve as numerical representations of textual or visual data. These embeddings, denoted as E encode the essence of the input content, enabling comparisons and evaluations. The cosine distance, a fundamental metric in vector space analysis, measures the angular separation between embeddings: </p>
+<p>         \( \text{Cosine Distance}(\mathbf{E}_i, \mathbf{E}_j) = \frac{\mathbf{E}_i \cdot \mathbf{E}_j}{\| \mathbf{E}_i \| \cdot \| \mathbf{E}_j \|} \) </p>
+<p>This metric forms the cornerstone of similarity assessment, allowing safety checkers to gauge the likeness between the input content and predefined tokens denoting safe \((\mathbf{T}_s)\) or unsafe \((\mathbf{T}_u)\) categories. However, the efficacy of this approach hinges on the sensitivity of the cosine distance to nuances in the data distribution.</p>
 <img src='./assets/DEEJ_SCHEMATICS.png', width='100%'>
 <h3>Tinkering with Software:</h3>
 <p>Once the hardware was up and running, it was time to dive into the software side of things. Configuring deej is a piece of cake – just whip up a simple YAML file to map sliders to your favorite apps and devices, and you're good to go. The lightweight desktop client, written in Go and a simple ass arduino code that converts all the analog signals from the potentiometers to sweet digital signals [0-1024], plays nice with your system and gives you real-time control over app volumes !</p>

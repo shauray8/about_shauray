@@ -1,0 +1,112 @@
+
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>ELLA - Equip Diffusion Models with LLM for Enhanced Semantic Alignment</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="Musings of a Computer Scientist.">
+    <link rel="canonical" href="http://karpathy.github.io/2022/03/14/lecun1989/">
+    <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Andrej Karpathy blog posts" />
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="main.css">
+
+    <!-- Google Analytics -->
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+      ga('create', 'UA-3698471-23', 'auto');
+      ga('send', 'pageview');
+    </script>
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+
+  <div class="wrap">
+
+    <a class="site-title" href="./blog.html">We Must Know, We Will Know</a>
+    
+</header>
+
+
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>ELLA - Equip Diffusion Models with LLM for Enhanced Semantic Alignment</h1>
+    <p class="meta">Apr 29, 2024</p>
+  </header>
+
+  <article class="post-content">
+  <style>
+.post-header h1 {
+    font-size: 35px;
+}
+.post pre,
+.post code {
+    background-color: #fcfcfc;
+    font-size: 13px; /* make code smaller for this post... */
+}
+</style>
+
+<p>In the realm of text-to-image generation, diffusion models have emerged as a powerful force, captivating the imagination of researchers and enthusiasts alike. However, despite their remarkable capabilities, these models still face challenges in comprehending dense prompts that encompass multiple objects, detailed attributes, and complex relationships. To address this limitation, an approach called ELLA (Efficient Large Language Model Adapter) is introduced by <a href="https://openreview.net/profile?id=~Xiwei_Hu1" rel="nofollow">Xiwei Hu*</a>,     <a href="https://wrong.wang/" rel="nofollow">Rui Wang*</a>,     <a href="https://openreview.net/profile?id=~Yixiao_Fang1" rel="nofollow">Yixiao Fang*</a>,     <a href="https://openreview.net/profile?id=~BIN_FU2" rel="nofollow">Bin Fu*</a>,     <a href="https://openreview.net/profile?id=~Pei_Cheng1" rel="nofollow">Pei Cheng</a>,     <a href="https://www.skicyyu.org/" rel="nofollow">Gang Yu✦</a> , which equips text-to-image diffusion models with the prowess of Large Language Models (LLMs) to enhance text alignment without training of either U-Net or LLM.<br><br> <a>https://github.com/TencentQQGYLab/ELLA/</a></p>
+
+<p>The architecture of ELLA, as illustrated in the figure below from the paper, consists of a pre-trained LLM, such as T5, TinyLlama, or LLaMA-2, serving as the text encoder, and a Timestep-Aware Semantic Connector (TSC) that interacts with the text features to facilitate improved semantic conditioning during the diffusion process. This design allows for the extraction of dynamic text features at various denoising stages, effectively conditioning the frozen U-Net at distinct semantic levels.</p>
+
+<p>To facilitate TSC in dense information comprehension, ELLA employs a dataset rich in information density, constructed by synthesizing highly informative text-image pair captions using state-of-the-art Multi-modal Language Language Models (MLLM). Once trained, TSC can seamlessly integrate with community models and downstream tools, such as LoRA and ControlNet, to improve their text-image alignment capabilities.</p>
+
+<p>the architecture that followes all the changes is actually pretty neat and simple</p>
+
+<img src='./assets/ella_arch.png', width='100%'>
+
+<p>Now, let's delve into the technical aspects of ELLA. The core of ELLA lies in the Timestep-Aware Semantic Connector (TSC), which is designed to extract timestep-dependent conditions from the pre-trained LLM at various denoising stages. The architecture of TSC is based on the resampler, and it instills temporal dependency by integrating the timestep in the Adaptive Layer Normalization. This design allows TSC to adapt semantics features over sampling time steps, effectively conditioning the frozen U-Net at distinct semantic levels.</p>
+
+<p>
+In terms of LLM selection,the authors conducted experiments with 1B T5-XL encoder, 1.1B TinyLlama, and 13B LLaMA-2 on the SD v1.5. the 1.2B T5-XL encoder shows significant advantages in short prompts interpretation while falling short of LLaMA-2 13B in comprehending complex texts. This observation suggests that encoder models with bidirectional attention capabilities may capture richer text features, thereby providing more effective conditioning for image generation.</p>
+
+<p>
+In conclusion, ELLA  equipping diffusion models with the power of Large Language Models to better comprehend dense prompts and generate high-fidelity images that accurately reflect the given text is great. The Timestep-Aware Semantic Connector (TSC) plays a crucial role in this process, effectively conditioning the frozen U-Net at distinct semantic levels. As the technology continues to evolve, we can expect even more impressive advancements in the realm of text-to-image synthesis, driven by the synergy between diffusion models and Large Language Models.
+</p>
+
+<a href="#results"><p>Here are some experiments from my test runs </a><br><br> (vanilla SD15 (epic-realism and dark-sushi in some cases) | ELLA - fixed length | ELLA - flexible max length) </p>
+
+<img src='./assets/ella-inference-examples/A serene canine.png', width='100%'> 
+<i>A serene canine amidst tall grass, a red collar contrasting its black fur, gazing into a stormy sky.</i>
+<img src='./assets/ella-inference-examples/croc.png', width='100%'> 
+<i>Crocodile in a sweater</i>
+<img src='./assets/ella-inference-examples/turtle-lizard.png', width='100%'> 
+<i>A fantastical white turtle-lizard with a blue and pink shell, in a rocky habitat.</i>
+<img src='./assets/ella-inference-examples/red_book-yellow_vase.png', width='100%'> 
+<i>A red book and a yellow vase.</i>
+<img src='./assets/ella-inference-examples/red_book-yellow_vase-gpt4_refined_caption.png', width='100%'> 
+<i>A vivid red book with a smooth, matte cover lies next to a glossy yellow vase. The vase, with a slightly curved silhouette, stands on a dark wood table with a noticeable grain pattern. The book appears slightly worn at the edges, suggesting frequent use, while the vase holds a fresh array of multicolored wildflowers.</i>
+<img src='./assets/ella-inference-examples/sanctuary.png', width='100%'> 
+<i>An ethereal, inviting glass sanctuary beneath the Northern Lights.</i>
+<img src='./assets/ella-inference-examples/racoon_apple.png', width='100%'>
+<i>a racoon holding a shiny red apple over its head</i>
+<img src='./assets/ella-inference-examples/post-apocalyptic.png', width='100%'> 
+<i>An ominous, post-apocalyptic vision: Orange mushroom cloud over water, reflecting a starry sky.</i>
+<img src='./assets/ella-inference-examples/majestic_archway.png', width='100%'> 
+<i>An ethereal, starry vista with a majestic archway, ram's head, and serene mountainscape.</i>
+<img src='./assets/ella-inference-examples/racc.png', width='100%'> 
+<i>a mischievous raccoon standing on its hind legs, holding a bright red apple aloft in its furry paws. the apple shines brightly against the backdrop of a dense forest, with leaves rustling in the gentle breeze. a few scattered rocks can be seen on the ground beneath the raccoon's feet, while a gnarled tree trunk stands nearby.</i>
+<img src='./assets/ella-inference-examples/landscape_painting.png', width='100%'> 
+<i>An idyllic pink hued An idyllic pink hued landscape painting: Mountain range, river, green valley, purple flowers.: Mountain range, river, green valley, purple flowers.</i>
+<hr>
+<p><b> Now Here comes the intresting part right now it's just SD15 trained and realistically SDXL models are way better then SD15 based models and in I think the authors are working on training a version for SDXLs as well<br><br> until then I made ELLA part of a totally independent project (fork) from HuggingFace diffusers called Diffusers++ which is basically for diffusers community pipelines but maintained,<br><br> its still a little messy with little to no structure but here's a minimal PR <a href='https://github.com/ModelsLab/diffusers_plus_plus/pull/4'> https://github.com/ModelsLab/diffusers_plus_plus/pull/4 </a> that integrates ELLA with DIffusers++, migrates to newer phi3 which basically uses llama2 tokenizer and write a training script in order to train this for SDXL based models.</b> </p>
+<hr>
+<p><i> All of this does not represent the views of the authors</i></p>
+
+    </body>
+</html>
+
