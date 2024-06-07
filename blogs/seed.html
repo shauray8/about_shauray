@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Good Seed Makes a Good Crop</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="Musings of a Computer Scientist.">
+    <link rel="canonical" href="http://karpathy.github.io/2022/03/14/lecun1989/">
+    <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Andrej Karpathy blog posts" />
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="main.css">
+
+    <!-- Google Analytics -->
+    <script>
+      (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+      (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+      m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+      })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+      ga('create', 'UA-3698471-23', 'auto');
+      ga('send', 'pageview');
+    </script>
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+
+  <div class="wrap">
+
+    <a class="site-title" href="./blog.html">We Must Know, We Will Know</a>
+    
+</header>
+
+
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>Good Seed Makes a Good Crop</h1>
+    <p class="meta">Jun 8, 2024</p>
+  </header>
+
+  <article class="post-content">
+  <style>
+.post-header h1 {
+    font-size: 35px;
+}
+.post pre,
+.post code {
+    background-color: #fcfcfc;
+    font-size: 13px; /* make code smaller for this post... */
+}
+</style>
+
+<p>Let's get deep into the world of randomness, shall we? Into the randomness that governs the diffusion process and the wonders of controlled randomness. This journey will be a comprehensive exploration of how the tiny seeds of noise grow into the lush, vibrant gardens of generated images. <a style="color: green">https://arxiv.org/abs/2405.14828</a> <br></p>
+<h3>Introduction: The Seed of the Matter</h3>
+<p>The Diffusion process or I should say the reverse diffusion process, behind every generative AI model, capable of transforming textual descriptions into detailed visual representations like Stable Diffusion 2.0 or SDXL Turbo, essentially just refines random noise into coherent images and at the heart of this process lies the `seed` a seemingly insignificant number that determines the initial state of the latents and subsequently influences the entire generative trajectory</p>
+<h3>The Diffusion Process: A Sparse Overview</h3>
+<p style="color: red"><b>! There are very good guides on how diffusion works online this is just a sparse introduction to the diffusion process to build up the notion !</b></p>
+<p>The diffusion process is an iterative mechanism that converts random noise into an image. This process can be broadly divided into two stages: forward diffusion and reverse diffusion. Let's delve into these stages to understand their technical intricacies.</p>
+<h4>Forward Diffusion: Adding Noise</h4>
+<p>The forward diffusion process gradually corrupts an image by adding Gaussian noise over several steps. Mathematically, it is described by the following equation:</p>
+<p>\(q(x_t \mid x_{t-1}) = \mathcal{N}(x_t; (1 - \beta_t) x_{t-1}, \beta_t I)\)</p>
+<p>
+<ul>
+    <li>\(x_t\) represents the noisy latent variable at timestep \(t\).</li>
+    <li>\(\beta_t\) is the variance schedule, controlling the amount of noise added at each step.</li>
+    <li>\(\mathcal{N}\) denotes a Gaussian distribution.</li>
+</ul>
+</p>
+<p>Over time, the image is transformed into pure noise, which serves as the starting point for the reverse diffusion process.</p>
+<h4>Reverse Diffusion: Removing Noise</h4>
+<p>The reverse diffusion process, guided by a pre-trained model, aims to denoise the noisy latent variables step-by-step, eventually reconstructing a high-quality image. This is expressed as:</p>
+<p>
+    \(p_\theta(x_{t-1} \mid x_t, \mathbf{s}) = \mathcal{N}(x_{t-1}; \mu_\theta(x_t, t, \mathbf{s}), \Sigma_\theta(x_t, t, \mathbf{s}))\) where:
+</p>
+<ul>
+    <li>\(\mu_\theta(x_t, t, \mathbf{s})\) is the predicted mean, influenced by the current state \(x_t\), timestep \(t\), and the seed \(\mathbf{s}\).</li>
+    <li>\(\Sigma_\theta(x_t, t, \mathbf{s})\) is the predicted variance.</li>
+    <li>\(\mathbf{s}\) is the seed, which ensures the process is stochastic but repeatable.</li>
+</ul>
+</p>
+<p style="color: orange"><b>[Appendix A]</b></p>
+
+<h3>Seeds: The Architects of Randomness</h3>
+<p>Moving on to the core focus of the this blog: Seeds play a crucial role in this process. Each seed initializes the random number generator that produces the initial noise and the noise added at each reverse diffusion step. Consequently, the choice of seed can lead to vastly different generated images even for the same textual description</p>
+<h3>Exploring the Impact of Seeds</h3>
+<p>To illustrate the profound impact of seeds, let's consider two examples:
+<ul>
+  <li>Best Seed (FID <b style="color: orange">[Appendix B]</b>: 21.60): Seed 469</li>
+  <li>Worst Seed (FID: 31.97): Seed 696</li>
+</ul>
+These seeds were identified through extensive experimentation and analysis from the authors. The FID score, where lower values indicate higher quality, highlights how the choice of seed can significantly affect the output quality.
+</p>
+<img src='./assets/graph_seed.png', width='100%'>
+<h3>Seed and Intermediate Noise</h3>
+<p>
+An interesting facet of the seed's influence is its effect on intermediate noise levels during the reverse diffusion process. Our experiments and the experiments from the paper revealed that while the initial noise predominantly determines the final image, the noise added at each step, controlled by the seed, does not really affect the quality or has any substantial change in the final output.
+</p>
+<img src='./assets/seed_exp1.jpg', width='100%'>
+<p style="font-size:11px; margin-top:-20px">we first set the seed to `i` and begin the reverse diffusion process. Then, at an intermediate timestep, we change the seed to `j` and complete the image generation process. We explore using seeds 0 and 1 for both `i` and `j`, as well as swapping the seed at early, mid, and late timesteps respectively of the reverse diffusion process. Despite these variations, we found that the initial noisy latent significantly controls the generated content, while the random noise introduced at intermediate reparameterization steps has no visible impact on the generated images</p>
+<h3>Visual Fingerprints: The Seeds' Distinguishing Marks</h3>
+<p>Each seed imprints a unique "visual fingerprint" on the generated images. The authors from the paper trained a 1,024-way classifier to predict the seed from an image with over 99.9% accuracy, demonstrating the distinct influence of seeds. This classifier revealed that even subtle variations in noise, dictated by the seed, result in distinguishable visual features. These findings suggest that seeds may encode unique visual features, prompting us to explore their impact across several interpretable dimensions</p>
+<p>The authors reduced the dimensions in order to better classify the seeds according to the features which resulted in some seeds giving certain features in the output i.e. having a frame around the image even though not prompted to, having a white sky instead of a blue sky, giving a grayscaled output etc.</p>
+<img src='./assets/seed_gray.png', width='100%'>
+<p style="font-size:11px; margin-top:-20px"> For more details and a detailed overview of all the methods and results mentioned go read the paper <a> https://arxiv.org/abs/2405.14828 </a></p>
+<h3>Applications: High-Fidelity Inference and Diversified Sampling</h3>
+<p>By identifying and leveraging "golden seeds," we can:
+<ul>
+  <li>Enhance high-fidelity inference by limiting sampling to top-K seeds, improving FID scores.</li>
+  <li>Enable diversified sampling based on style or layout, providing users with a variety of visually distinct images.</li>
+  <li>Improve inpainting quality by avoiding seeds that introduce unwanted text artifacts.</li>
+</ul>
+</p>
+
+<h3>Conclusion: The Magic of Good Seeds</h3>
+<p>Our journey through the randomness of seeds in T2I diffusion models reveals that not all seeds are created equal. By understanding and leveraging the power of good seeds, we can push the boundaries of what’s possible in image generation. Stay tuned for more deep dives and keep those seeds planted firmly in the fertile ground of your curiosity.
+
+And remember, in the world of T2I diffusion, a good seed makes a good crop.
+</p>
+<br>
+<hr>
+<h3><b style="color:orange">Appendix A</b> : Diffusion Process Equations</h3>
+
+<p>The forward diffusion process: \(q(\mathbf{x}_t | \mathbf{x}_{t-1}) = \mathcal{N}(\mathbf{x}_t; \sqrt{1-\beta_t} \mathbf{x}_{t-1}, \beta_t \mathbf{I})\)</p>
+
+<p>Reverse process given the seed: \(p_\theta(\mathbf{x}_{t-1} | \mathbf{x}_t, \mathbf{s}) = \mathcal{N}(\mathbf{x}_{t-1}; \mu_\theta(\mathbf{x}_t, t, \mathbf{s}), \Sigma_\theta(\mathbf{x}_t, t, \mathbf{s}))\)</p>
+
+<p>where \(\mu_\theta\) and \(\Sigma_\theta\) are defined as:</p>
+
+<p>\(\mu_\theta(\mathbf{x}_t, t, \mathbf{s}) = \frac{1}{\sqrt{\alpha_t}} \left( \mathbf{x}_t - \frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon_\theta(\mathbf{x}_t, t, \mathbf{s}) \right)\)</p>
+<p>\(\Sigma_\theta(\mathbf{x}_t, t, \mathbf{s}) = \sigma_t^2 \mathbf{I}\)</p>
+
+<p>with \(\alpha_t = 1 - \beta_t\) and \(\bar{\alpha}_t = \prod_{i=1}^t \alpha_i\). The term \(\epsilon_\theta(\mathbf{x}_t, t, \mathbf{s})\) is the noise predictor, a crucial part of the denoising process influenced by the seed.</p>
+
+<h3><b style="color: orange">Appendix B</b> : Fréchet Inception Distance (FID) </h3>
+<p>The FID score calculation involves the mean \(\mu\) and covariance \(\Sigma\) of the real and generated image distributions:</p>
+
+<p>\(\text{FID} = || \mu_r - \mu_g ||^2 + \text{Tr}(\Sigma_r + \Sigma_g - 2(\Sigma_r \Sigma_g)^{1/2})\)</p>
+
+<p>Lower FID scores indicate better quality images, as the distribution of generated images is closer to that of real images.</p>
+
+<p>By leveraging these mathematical frameworks, we can fine-tune the generation process to yield visually stunning and high-quality images with the right seeds. Happy seeding!</p>
+
+<h5> Related Work </h5>
+<p style="font-size:12px">arXiv:2404.11120, arXiv:2404.04650, arXiv:2312.08872 and others have aimed to optimize the initial noise to produce images that better align with the text prompt, reduce visual artifacts, or achieve a desired layout
+    </body>
+</html>
