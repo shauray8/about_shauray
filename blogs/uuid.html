@@ -63,12 +63,19 @@
 <h3>A quick overview of what a mess of versions it is !</h3>
 <p>I really like this illustration from <a href='https://www.youtube.com/@t3dotgg/'>@t3dotgg</a> and this post <a href='https://planetscale.com/blog/the-problem-with-using-a-uuid-primary-key-in-mysql'>The Problem with Using a UUID Primary Key in MySQL</a> will give you a very good explaination of how messed up this is, which basically translates to, <br> </p>
 <ul>
-  <li> <b>UUIDv1</b> - Uses the Gregorian calendar &#x1F937;&#x200D;&#x2642;&#xFE0F; segments looks like <b>['time_low'-'time_mid'-'time_low_and_version'-'clock_seq_and_version'-'node'] </b>- now using the Gregorian calendar is not the biggest issues here, rather they had the biggest segment set to <b>'node'</b> which is the unique address of the system generating the UUID. I'm not security expert but this looks bad </li>
+  <li> <b>UUIDv1</b> - Uses the Gregorian calendar &#x1F937;&#x200D;&#x2642;&#xFE0F; segments looks like <b>['time_low'-'time_mid'-'time_low_and_version'-'clock_seq_and_version'-'node'] </b>- now using the Gregorian calendar is not the biggest issues here, rather they had the biggest segment set to <b>'node'</b> which is the unique address of the system generating the UUID. I'm no security expert but this looks bad </li>
+  <br>
   <li> <b>UUIDv2</b> - nothing intresting here, they replaced the <b>'low_time'</b> component of the UUID with POSIX user ID </li>
-  <li><b>UUIDv3 and v5</b> - they started using a 128bit hash and both the versions uses a different hash MD5 and SHA1 repectively, the intresting part here is that V3 and V5 is similar but not V4, and V4 is what is most widely used,</li>
-
-
-
+  <br>
+  <li><b>UUIDv3 and v5</b> - they started using a <b>128bit</b> hash and both versions use a different hash MD5 and SHA1 repectively, the intresting part here is that V3 and V5 is similar but not V4, and V4 is what is widely used</li>
+  <br>
+  <li><b>UUIDv4</b> - this is what most of the population uses for there random keys and in my opinion this is the simplest of them all, <b>it just uses a set of random alphanumerics</b>, with an exception that the first position of the 3rd segment is always set to the version number (seen throughout the versions) </li>
+  <br>
+  <li><b>UUIDv6</b> - now V6 is very similar to V1 flipping the timestamps, meaning the most significant portions of the timestamp are stored first. now in turn this makes it a little more <b>sortable</b>, since the most significant portion of the timestamp is upfront</li>
+  <br>
+  <li><b>UUIDv7</b> - now this is the only version I can think of using in come cases instead of V4, this basically finally uses the <b>UNIX timestamp</b> instead of the Gregorian calendar and the rest of the string is just random alphanumerics, which makes it less trackable back to their source and this is what we will discuss moving forward</li>
+  <br>
+  <li><b>UUIDv8</b> - this permits vendor-specific implementations while adhering to RFC standards and the illustration says its more of a vibe then a standard now</li>
 </ul>
 
 <img src="./assets/uuid.png", width='100%'></img>
