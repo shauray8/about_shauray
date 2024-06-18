@@ -64,6 +64,10 @@
 <p>I really like this illustration from <a href='https://www.youtube.com/@t3dotgg/'>@t3dotgg</a> and this post <a href='https://planetscale.com/blog/the-problem-with-using-a-uuid-primary-key-in-mysql'>The Problem with Using a UUID Primary Key in MySQL</a> will give you a very good explaination of how messed up this is, which basically translates to, <br> </p>
 <ul>
   <li> <b>UUIDv1</b> - Uses the Gregorian calendar &#x1F937;&#x200D;&#x2642;&#xFE0F; segments looks like <b>['time_low'-'time_mid'-'time_low_and_version'-'clock_seq_and_version'-'node'] </b>- now using the Gregorian calendar is not the biggest issues here, rather they had the biggest segment set to <b>'node'</b> which is the unique address of the system generating the UUID. I'm not security expert but this looks bad </li>
+  <li> <b>UUIDv2</b> - nothing intresting here, they replaced the <b>'low_time'</b> component of the UUID with POSIX user ID </li>
+  <li><b>UUIDv3 and v5</b> - they started using a 128bit hash and both the versions uses a different hash MD5 and SHA1 repectively, the intresting part here is that V3 and V5 is similar but not V4, and V4 is what is most widely used,</li>
+
+
 
 </ul>
 
