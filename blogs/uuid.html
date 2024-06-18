@@ -4,7 +4,7 @@
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>UUIDs - a mess of widely used standards </title>
+    <title>UUIDs - Mess Withing a Widely Used Standard</title>
     <meta name="viewport" content="width=device-width">
     <meta name="description" content="Discovering secret seeds in Text-to-Image Diffusion Models">
     <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Shauray Singh blog posts" />
@@ -43,8 +43,8 @@
       <div class="post">
 
   <header class="post-header">
-    <h1>SF-V: Single forward video generation model</h1>
-    <p class="meta">Jun 9, 2024</p>
+    <h1>UUIDs - Mess Withing a Widely Used Standard</h1>
+    <p class="meta">Jun 18, 2024</p>
   </header>
 
   <article class="post-content">
@@ -59,9 +59,15 @@
 }
 </style>
 
-<p>Let's get deep into the world of randomness, shall we? Into the randomness that governs the diffusion process and the wonders of controlled randomness. This journey will be a comprehensive exploration of how the tiny seeds of noise grow into the lush, vibrant gardens of generated images. <a style="color: green">https://arxiv.org/abs/2405.14828</a> <br></p>
-<h3>Introduction: The Seed of the Matter</h3>
-<p>The Diffusion process or I should say the reverse diffusion process, behind every generative AI model, capable of transforming textual descriptions into detailed visual representations like Stable Diffusion 2.0 or SDXL Turbo, essentially just refines random noise into coherent images and at the heart of this process lies the `seed` a seemingly insignificant number that determines the initial state of the latents and subsequently influences the entire generative trajectory</p>
+<p>It's time to dive into the wild, wacky, and sometimes downright infuriating world of UUIDs. Yes, those strings of alphanumeric chaos that we love to hate and hate to love We're not here to explain what UUIDs are (Google that if you must), but rather to vent, rant, and explore some wild ideas about how V7 can help in some ways, specially with S3s (S3s requires a seperate rant of it's own)</p>
+<h3>A quick overview of what a mess of versions it is !</h3>
+<p>I really like this illustration from <a href='https://www.youtube.com/@t3dotgg/'>@t3dotgg</a> and this post <a href='https://planetscale.com/blog/the-problem-with-using-a-uuid-primary-key-in-mysql'>The Problem with Using a UUID Primary Key in MySQL</a> will give you a very good explaination of how messed up this is, which basically translates to, <br> </p>
+<ul>
+  <li> <b>UUIDv1</b> - Uses the Gregorian calendar &#x1F937;&#x200D;&#x2642;&#xFE0F; segments looks like <b>['time_low'-'time_mid'-'time_low_and_version'-'clock_seq_and_version'-'node'] </b>- now using the Gregorian calendar is not the biggest issues here, rather they had the biggest segment set to <b>'node'</b> which is the unique address of the system generating the UUID. I'm not security expert but this looks bad </li>
+
+</ul>
+
+<img src="./assets/uuid.png", width='100%'></img>
 <h3>The Diffusion Process: A Sparse Overview</h3>
 <p style="color: red"><b>! There are very good guides on how diffusion works online this is just a sparse introduction to the diffusion process to build up the notion !</b></p>
 <p>The diffusion process is an iterative mechanism that converts random noise into an image. This process can be broadly divided into two stages: forward diffusion and reverse diffusion. Let's delve into these stages to understand their technical intricacies.</p>
