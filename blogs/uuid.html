@@ -83,27 +83,17 @@
 <p style="color: red"><b>! There are very good guides on how diffusion works online this is just a sparse introduction to the diffusion process to build up the notion !</b></p>
 <p>The diffusion process is an iterative mechanism that converts random noise into an image. This process can be broadly divided into two stages: forward diffusion and reverse diffusion. Let's delve into these stages to understand their technical intricacies.</p>
 <h3>Trees 101</h3>
-<p>The forward diffusion process gradually corrupts an image by adding Gaussian noise over several steps. Mathematically, it is described by the following equation:</p>
-<p>\(q(x_t \mid x_{t-1}) = \mathcal{N}(x_t; (1 - \beta_t) x_{t-1}, \beta_t I)\)</p>
-<p>
-<ul>
-    <li>\(x_t\) represents the noisy latent variable at timestep \(t\).</li>
-    <li>\(\beta_t\) is the variance schedule, controlling the amount of noise added at each step.</li>
-    <li>\(\mathcal{N}\) denotes a Gaussian distribution.</li>
-</ul>
-</p>
-<p>Over time, the image is transformed into pure noise, which serves as the starting point for the reverse diffusion process.</p>
+<p>Now Trees, with there hierarchical strcutre, play a pivotal role in all of computer science in my opinion also providing a backbone for storing indeces for huge databases, (If you don't know about Trees consider taking one of the MIT OCW courses on data structres), for now we will talk about B-Trees often called as balanced trees but it's not really known that the B stands for in the B-Trees, also we'll talk about B+ Trees which is a much more widely accepted data structure when storing huge amounts of data </p>
+
 <h4>B Trees</h4>
-<p>The reverse diffusion process, guided by a pre-trained model, aims to denoise the noisy latent variables step-by-step, eventually reconstructing a high-quality image. This is expressed as:</p>
-<p>
-    \(p_\theta(x_{t-1} \mid x_t, \mathbf{s}) = \mathcal{N}(x_{t-1}; \mu_\theta(x_t, t, \mathbf{s}), \Sigma_\theta(x_t, t, \mathbf{s}))\) where:
-</p>
-<ul>
-    <li>\(\mu_\theta(x_t, t, \mathbf{s})\) is the predicted mean, influenced by the current state \(x_t\), timestep \(t\), and the seed \(\mathbf{s}\).</li>
-    <li>\(\Sigma_\theta(x_t, t, \mathbf{s})\) is the predicted variance.</li>
-    <li>\(\mathbf{s}\) is the seed, which ensures the process is stochastic but repeatable.</li>
-</ul>
-</p>
+<p>Assuming you know about BSTs, we'll work with a modification of that consider that now every node can store two keys, now you have 3 paths to take when searching for a key very similar to what you would do for a binary search tree, now to formalize this, each node in a B-Tree of order d contains at most 2d keys and 2d+1 pointers as shown below, now the keys can vary from node to node, but each must have at least d keys and d+1 pointers, such that every node is atleast half full</p>
+<img src="./assets/btree.png" width='100%'></img>
+<p>Balancing a B-Tree : with BST random insertions can leave a tree unbalanced which in turn makes it harder to find a key(atleast the worst case senario), with B-Trees the longest path is logdn, now with this you will never visit more then 1+logdn nodes</p>
+<img src='./assets/complex.png' width='100%'></img>
+<p>Insertion : First, a find proceeds from the root to locate the proper leaf for insertion. Then the insertion is performed, and balance is restored by a procedure which moves from the leaf back toward the root.</p>
+<p>Deletion : Deletion in a B-tree also requires a find operation to locate the proper node. There are then two possibilities: the key to be deleted resides in a leaf, or the key resides in a nonleaf node. A nonleaf deletion requires that an adjacent key be found and swapped into the vacated position so that it finds work correctly</p>
+
+<p>Now with these there is a notion of underflow in the leaves as a minimum of d keys is required so in order to restore the balance a key is borrowed from its neighbour, and if there are'nt enough keys to destribute a concatenate happens to restore the balance</p>
 
 <h4>B+ Trees</h4>
 <p>The reverse diffusion process, guided by a pre-trained model, aims to denoise the noisy latent variables step-by-step, eventually reconstructing a high-quality image. This is expressed as:</p>
