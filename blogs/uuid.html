@@ -149,31 +149,64 @@ The compexity comes where the node y is full before the insertion, it must be sp
 </p>
 
 
-<h3>Optimizing insertions for B+ Trees</h3>
-<p>Now optimizations is where we do have to remember the heirarchical structure of the memory, keeping that in mind insertions or deletions on a B+ Tree can be optimized to some extent, some of the issues that should be optimized are : </p>
+<h3><b>Optimizing insertions for B+ Trees</b></h3>
+<p>Now optimizations is where we do have to remember the heirarchical structure of the memory</p>
 <p>
+Standard B+ Tree implementations, while theoretically elegant, often suffer from severe performance degradation when faced with real-world, high-throughput scenarios. Let's dissect the primary bottlenecks:
 <ul>
-  <li>Constantly need to search from root</li>
-  <li>Modifying random pages: poor cache efficiency</li>
-  <li>leaves poorly utilized (typically half empty) pages</li>
+  <li><b>Root-to-leaf Traversal Overhead</b>: Each random insertion necessitates a complete traversal from root to leaf. In large-scale systems, this results in O(log n) I/O operations per insertion, which becomes prohibitively expensive as n grows.</li>
+  <li><b>Cache-Unfriendly Random Page Modifications </b>: The stochastic nature of insertions leads to unpredictable page modifications across the tree structure. This behavior is anathema to modern CPU cache architectures, resulting in frequent cache misses and suboptimal memory access patterns.
+</li>
+<li><b>Underutilized Leaf Nodes</b> : Typical B+ Tree implementations maintain leaves at approximately 50% capacity to facilitate splits and merges. While this simplifies rebalancing operations, it leads to significant wasted space and increased tree depth.</li>
 </ul>
-Now all of this boils down to using random key indices as we 1. search random pages everytime for which the cache has to bring up different sections of tree into memory everytime an insertion is called 2. which then results in poor cache efficiency and 3. might leave the nodes half empty through the process 
+The root cause of these inefficiencies lies in the use of <b>randomly distributed key indices</b>. This randomness, while beneficial for even distribution, wreaks havoc on locality of reference and predictable access patterns.
+</p>
+<p>
+Leveraging Sorted Insertions for Optimized Performance : 
 
-<br>
+Implementing a sorted insertion strategy can mitigate these issues substantially:
+<ol>
+  <li><b><i>Localized Page Access</i></b>: By maintaining insertions on the rightmost path of the tree, we dramatically improve cache utilization. This approach allows for prefetching and reduces TLB misses.</li>
+  <li><b><i>Controlled Fill Factor</i></b>: Sorted insertions enable precise control over leaf node utilization. By maintaining a higher fill factor (e.g., 80-90%), we can significantly reduce the overall tree depth and improve space efficiency.</li>
+  <li><b><i>Sequential Disk Layout</i></b>: Sorted keys naturally lead to a more contiguous on-disk representation of leaf nodes. This alignment with underlying storage characteristics can yield substantial I/O performance gains, especially on HDDs or SMR drives.</li>
+</ol>
 
-Now sorting can in theory solve these problems, as we can now fill up every leaf node to it's desired fill factor, 1. with this approch we never touch the left hand side of the tree, through which we optimize our cache utilization, 2. with this method we can control the fill factor for every leaf page which in turn optimized the utilization of the leaf node and 3. the layout of the leaf nodes are much more sequential on the disk
+</p>
+<p>
+UUIDv7: The Nexus of Uniqueness and Sortability
+The advent of UUIDv7 provides an elegant solution to the seemingly contradictory requirements of unique identifiers and sortable keys. By encoding a high-precision timestamp in the most significant bits, UUIDv7 offers:
+
+<ol>
+  <li> <b>Temporal Sorting</b>: Keys are naturally ordered by creation time, facilitating the sorted insertion optimizations discussed above.</li>
+  <li> <b>Maintained Uniqueness</b>: The inclusion of random bits ensures collision resistance even in high-concurrency environments.</li>
+  <li> <b>Distributed Generation</b>: UUIDs can be generated without coordination, crucial for distributed systems.</li>
 
 this is where UUIDv7 comes in, with this the first segment of the alphanumeric is not random but rather the UNIX time, which in turn makes the UUIDs sortable, which enables us to use the above stated optimizations 
+</ol>
+</p>
+<h3>Empirical Observations and Hypotheses</h3>
+<p>While the exact implementations of large-scale object storage systems like AWS S3 or Cloudflare R2 are not public, observed behavior suggests potential B+ Tree-like underpinnings. Specifically, the correlation between bucket size and post-handshake upload latency hints at tree rebalancing operations as a potential bottleneck.
+</p>
+<p>Given that a production-grade B+ Tree with a depth of 2 can easily accommodate millions of entries, the optimizations proposed here could yield significant benefits:
+
+<ol>
+  <li><b>Reduced Rebalancing Frequency</b>: Sorted insertions naturally lead to fewer tree restructuring operations.</li>
+  <li><b>Improved Cache Efficiency</b>: By localizing insertions to a specific region of the tree, we can maintain critical pages in cache for extended periods.</li>
+  <li><b>Enhanced I/O Patterns</b>: The more predictable nature of insertions allows for more effective I/O scheduling and potential write coalescing.</li>
+</ol>
 
 </p>
-<h3>Thoughts</h3>
-<p>To illustrate the profound impact of seeds, let's consider two examples:
+<h3>Conclusion and Future Directions</h3>
+<p>While these optimizations offer substantial improvements, they are not a panacea for all storage system designs. The efficacy of these approaches depends heavily on workload characteristics and system requirements.
+
+Future research directions might include:
+
 <ul>
-  <li>Best Seed (FID <b style="color: orange">[Appendix B]</b>: 21.60): Seed 469</li>
-  <li>Worst Seed (FID: 31.97): Seed 696</li>
+  <li>Adaptive algorithms that dynamically adjust between random and sorted insertion strategies based on observed workload patterns.</li>
+  <li>Integration with emerging storage technologies like ZNS SSDs to further optimize physical data layout.</li>
+  <li>Exploration of hybrid data structures that combine the strengths of B+ Trees with other indexing mechanisms for specific use cases.</li>
 </ul>
-These seeds were identified through extensive experimentation and analysis from the authors. The FID score, where lower values indicate higher quality, highlights how the choice of seed can significantly affect the output quality.
-</p>
+As we continue to push the boundaries of large-scale data management, such optimizations will become increasingly crucial. The intersection of data structure design, systems architecture, and hardware characteristics remains a fertile ground for innovation in the pursuit of performant and scalable storage solutions.</p>
 <h5> Related Work </h5>
 <p style="font-size:12px">arXiv:2404.11120, arXiv:2404.04650, arXiv:2312.08872 and others have aimed to optimize the initial noise to produce images that better align with the text prompt, reduce visual artifacts, or achieve a desired layout
     </body>
