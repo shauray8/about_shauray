@@ -105,19 +105,19 @@
 <img src="./assets/bpt.png", width='100%'></img>
 </p>
 <p>
-<b>Non-Leaf Node (x)</b>
+<b>Non-Leaf Node (\( x \))</b>
 <ul>
   <li>\( x.n \) : Number of router values</li>
   <li>\( x.router[1..n] \) : Sorted router values \( (x.router[i] &lt; x.router[i+1]) \)</li>
   <li>\( x.leaf \) : Boolean flag set to \( FALSE \)</li>
   <li>\( x.c[1..n+1] \) : Pointers to child nodes</li>
 </ul>
-<b>Leaf Node (x):</b>
+<b>Leaf Node (\( x \)):</b>
 <ul>
-  <li> x.n: Number of key-value pairs</li>
-  <li> x.key[1..n]: Sorted key values (x.key[i] &lt; x.key[i+1])</li>
-  <li> x.leaf: Boolean flag set to TRUE</li>
-  <li> x.next: Pointer to the next leaf node (for range queries)</li>
+  <li> \( x.n \) : Number of key-value pairs</li>
+  <li> \( x.key[1..n] \) : Sorted key values \( (x.key[i] &lt; x.key[i+1]) \)</li>
+  <li> \( x.leaf \) : Boolean flag set to \( TRUE \)</li>
+  <li> \( x.next \) : Pointer to the next leaf node (for range queries)</li>
 </ul>
 
 <img src="./assets/bplusacc.png" width="100%"></img>
@@ -127,7 +127,7 @@
 <ol>
   <li><b>Depth Uniformity</b>: All leaf nodes reside at the same depth, defining the tree's height</li>
   <li><b>Minimum Occupancy</b>: Every non-root node is at least half-filled, ensuring balanced tree structure</li>
-  <li><b>Bounded Height</b>: For a tree of order t, the height h ≤ log_t(n), where n is the number of keys.</li>
+  <li><b>Bounded Height</b>: For a tree of order \( t \), the height \( h ≤ log_{t}(n) \), where n is the number of keys.</li>
 </ol>
 </p>
 <p>The search algorithm traverses from root to leaf, similar to B-Trees, with the key distinction that it always terminates at a leaf node. This property ensures consistent search time complexity.
@@ -188,7 +188,7 @@ The B+ Tree's structure makes it particularly well-suited for systems requiring 
 <p>
 Standard B+ Tree implementations, while theoretically elegant, often suffer from severe performance degradation when faced with real-world, high-throughput scenarios. Let's dissect the primary bottlenecks:
 <ul>
-  <li><b>Root-to-leaf Traversal Overhead</b>: Each random insertion necessitates a complete traversal from root to leaf. In large-scale systems, this results in O(log n) I/O operations per insertion, which becomes prohibitively expensive as n grows.</li>
+  <li><b>Root-to-leaf Traversal Overhead</b>: Each random insertion necessitates a complete traversal from root to leaf. In large-scale systems, this results in \( O(log n) \) I/O operations per insertion, which becomes prohibitively expensive as n grows.</li>
   <li><b>Cache-Unfriendly Random Page Modifications </b>: The stochastic nature of insertions leads to unpredictable page modifications across the tree structure. This behavior is anathema to modern CPU cache architectures, resulting in frequent cache misses and suboptimal memory access patterns.
 </li>
 <li><b>Underutilized Leaf Nodes</b> : Typical B+ Tree implementations maintain leaves at approximately 50% capacity to facilitate splits and merges. While this simplifies rebalancing operations, it leads to significant wasted space and increased tree depth.</li>
