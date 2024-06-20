@@ -80,77 +80,111 @@
 
 <img src="./assets/uuid.png", width='100%'></img>
 <h3>UUIDv7 and Simple Storage Solutions (or databases in general)</h3>
-<p style="color: red"><b>! There are very good guides on how diffusion works online this is just a sparse introduction to the diffusion process to build up the notion !</b></p>
-<p>The diffusion process is an iterative mechanism that converts random noise into an image. This process can be broadly divided into two stages: forward diffusion and reverse diffusion. Let's delve into these stages to understand their technical intricacies.</p>
+<p>Moving forward we will mostly discuss on databases, optimizations through the tree structure used in modern databases and a lot of what I thought through the week (might be very dumb), so read the related papers mentioned below in order to get a better understanding of things</p>
 <h3>Trees 101</h3>
 <p>Now Trees, with there hierarchical strcutre, play a pivotal role in all of computer science in my opinion also providing a backbone for storing indeces for huge databases, (If you don't know about Trees consider taking one of the MIT OCW courses on data structres), for now we will talk about B-Trees often called as balanced trees but it's not really known that the B stands for in the B-Trees, also we'll talk about B+ Trees which is a much more widely accepted data structure when storing huge amounts of data </p>
 
-<h4>B Trees</h4>
-<p>! Keeping in mind that the memory is not contiguous rather heirarchical !</p>
-<p>Assuming you know about BSTs, we'll work with a modification of that consider that now every node can store two keys, now you have 3 paths to take when searching for a key very similar to what you would do for a binary search tree, now to formalize this, each node in a B-Tree of order d contains at most 2d keys and 2d+1 pointers as shown below, now the keys can vary from node to node, but each must have at least d keys and d+1 pointers, such that every node is atleast half full</p>
+<h3>B Trees</h3>
+<p>Assuming you know about BSTs, we'll work with a modification of that consider that now every node can store two keys, now you have 3 paths to take when searching for a key very similar to what you would do for a binary search tree, now to formalize this, each node in a B-Tree of order \( d \) contains at most \( 2d \) keys and \(2d+1\) pointers as shown below, now the keys can vary from node to node, but each must have at least \( d \) keys and \( d+1 \) pointers, such that every node is atleast half full.</p>
 <img src="./assets/btree.png" width='100%'></img>
-<p>Balancing a B-Tree : with BST random insertions can leave a tree unbalanced which in turn makes it harder to find a key(atleast the worst case senario), with B-Trees the longest path is logdn, now with this you will never visit more then 1+logdn nodes</p>
+<p><b>Balancing a B-Tree</b> : with BST random insertions can leave a tree unbalanced which in turn makes it harder to find a key(atleast the worst case senario), with B-Trees the longest path is \( log_{d}n \), now with this you will never visit more then \( 1+log_{d}n \) nodes</p>
 <img src='./assets/complex.png' width='100%'></img>
-<p>Insertion : First, a find proceeds from the root to locate the proper leaf for insertion. Then the insertion is performed, and balance is restored by a procedure which moves from the leaf back toward the root.</p>
-<p>Deletion : Deletion in a B-tree also requires a find operation to locate the proper node. There are then two possibilities: the key to be deleted resides in a leaf, or the key resides in a nonleaf node. A nonleaf deletion requires that an adjacent key be found and swapped into the vacated position so that it finds work correctly</p>
+<p><b>Insertion</b> : First, a find proceeds from the root to locate the proper leaf for insertion. Then the insertion is performed, and balance is restored by a procedure which moves from the leaf back toward the root.</p>
+<p><b>Deletion</b> : Deletion in a B-tree also requires a find operation to locate the proper node. There are then two possibilities - <br><b> 1.</b> the key to be deleted resides in a leaf, or<br><b> 2.</b> the key resides in a nonleaf node. A nonleaf deletion requires that an adjacent key be found and swapped into the vacated position so that it finds work correctly</p>
 
 <p>Now with these there is a notion of underflow in the leaves as a minimum of d keys is required so in order to restore the balance a key is borrowed from its neighbour, and if there are'nt enough keys to destribute a concatenate happens to restore the balance</p>
+<hr>
+<h3>B+ Trees</h3>
+<p>B+ Trees are a sophisticated evolution of the B-Tree, optimized for efficient range queries and disk-based storage systems. The key distinction lies in the separation of routing and data:
 
-<h4>B+ Trees</h4>
-<p>With B+ Tree, all the keys reside in the leaves, the upper levels , which are organized as a B-Tree, consists only of the index.</p>
-<p>
-Structure of B+ Tree
 <ul>
-  <b>If a node is a non-leaf node:</b>
-  <li>x.n the number of route values currently stored in node x</li>
-  <li>the route values stored in node x in increasing order - x.router1 &lt; x.router2 </li>
-  <li>x.leaf, a boolean field whose value is FALSE meaning that x is a non-leaf node</li>
-  <li>x.n + 1 pointers x.c1, x.c2 ... x.cx.n+1 to the children of x</li>
+  <li><b>Leaf Nodes</b>: Contain all key-value pairs in sorted order.</li> 
+  <li><b>Non-Leaf Nodes</b>: Serve as an index structure, containing only routing information.</li>
+</ul>
 
-  <b>If a node is a leaf node:</b>
-  <li>x.n number of key values currently stored in x</li>
-  <li>the key value stored in node x in increasing order : x.key1 &lt; x.key2</li>
-  <li>x.leaf, a boolean field whose value is TRUE meaning that x is a leaf node</li>
-</ul>
-<img src="./assets/bplusacc.png" width="100%"></img>
-<p>Some intresting properties of a B+ Tree :</p>
-<p>
-<ul>
-  <li>every leaf node has the same depth which is the height of the tree</li>
-  <li>Every node of the B+-tree except the root node is at least half-filled.</li>
-  <br>
-  <p style="color:green">Very similar to what a B-Tree has</p>
-</ul>
-Now beacause the B+ Tree satisfies the given balance condition, we can prove that the height h of the B+ Tree 
-h less then or equal to logtn
+<img src="./assets/bpt.png", width='100%'></img>
 </p>
-<p>Also searching in a B+ Tree is very similar to how a B-Trees does it, with an exception being that it always terminates at the leaf node</p>
-
-<p>Insertion and Deletion for B+ Trees</p>
 <p>
-The insertion of the key k to a B+-tree is started by searching for the leaf node y which should contain k. This is performed in the same way as when performing the B+-tree-search operation. If there is enough space in y to insert the key k, k is inserted and no other actions are needed
-
-The compexity comes where the node y is full before the insertion, it must be split as follows:
+<b>Non-Leaf Node (x)</b>
 <ul>
-  <li>We allocate memory for a new node z.</li>
-  <li>the first t keys of node y are left in y</li>
-  <li>the last t keys of node y are transferred to the new node z.</li>
-  <li>the key k is inserted to either nodee y or z according to the value of k</li>
-  <li>A pointer to the new node z and a new router value are inserted to node x which is the parent of both y and z. A good choice for the new router value is the last key value in y.</li>
-  <li>If there is not enough space for a new pointer and router value in x, x must be split. In the worst case, all nodes in the path from the leaf to the root must be split which is rather intresting as with B+ Trees we grow the root rather then growing the leaves</li>
-  <br>
-  <li>while deletion, we do not remove the key value from non-leaf nodes </li>
-  <li>the first t keys of node y are left in y</li>
-  <li>the last t keys of node y are transferred to the new node z.</li>
-  <li>the key k is inserted to either nodee y or z according to the value of k</li>
-  <li>A pointer to the new node z and a new router value are inserted to node x which is the parent of both y and z. A good choice for the new router value is the last key value in y.</li>
-  <li>If there is not enough space for a new pointer and router value in x, x must be split. In the worst case, all nodes in the path from the leaf to the root must be split which is rather intresting as with B+ Trees we grow the root rather then growing the leaves</li>
+  <li>\( x.n \) : Number of router values</li>
+  <li>\( x.router[1..n] \) : Sorted router values \( (x.router[i] &lt; x.router[i+1]) \)</li>
+  <li>\( x.leaf \) : Boolean flag set to \( FALSE \)</li>
+  <li>\( x.c[1..n+1] \) : Pointers to child nodes</li>
 </ul>
+<b>Leaf Node (x):</b>
+<ul>
+  <li> x.n: Number of key-value pairs</li>
+  <li> x.key[1..n]: Sorted key values (x.key[i] &lt; x.key[i+1])</li>
+  <li> x.leaf: Boolean flag set to TRUE</li>
+  <li> x.next: Pointer to the next leaf node (for range queries)</li>
+</ul>
+
+<img src="./assets/bplusacc.png" width="100%"></img>
+
+<p><b>Critical Properties:</b></p>
+<p>
+<ol>
+  <li><b>Depth Uniformity</b>: All leaf nodes reside at the same depth, defining the tree's height</li>
+  <li><b>Minimum Occupancy</b>: Every non-root node is at least half-filled, ensuring balanced tree structure</li>
+  <li><b>Bounded Height</b>: For a tree of order t, the height h ≤ log_t(n), where n is the number of keys.</li>
+</ol>
+</p>
+<p>The search algorithm traverses from root to leaf, similar to B-Trees, with the key distinction that it always terminates at a leaf node. This property ensures consistent search time complexity.
+</p>
+
+<hr>
+<p><b>Insertion</b></p>
+<p>
+<ol>
+  <li>Locate target leaf node y via search algorithm.</li>
+  <li>If y has available space, insert key k and terminate.</li>
+  <li>If y is full:
+    <ol type='a'>
+    <li>Allocate new node z.</li>
+      <li>Distribute keys:
+        <ul>
+          <li>First t keys remain in y.</li>
+          <li>Last t keys transfer to z.</li>
+        </ul>
+      </li>
+    </ol>
+  </li>
+  <li> Insert k into appropriate node (y or z).</li>
+  <li>Update parent node x:
+    <ul>
+    <li>Insert pointer to z and new router value (typically last key in y).</li>
+      <li>If x lacks space, recursively split upwards.</li>
+    </ul>
+  </li>
+</ol>
+
+Notably, B+ Trees propagate splits upward, potentially growing the root, in contrast to downward growth in some other structures.
+<hr>
+</p>
+
+<p><b>Deletion</b></p>
+<p>
+<ol>
+  <li>Locate and remove key from leaf node.</li>
+  <li>If underflow occurs:</li>
+  <ol type="a">
+    <li>Attempt redistribution with sibling nodes.</li>
+    <li>If redistribution fails, merge with a sibling.</li>
+    <li>Update parent routing information.</li>
+  <li>Propagate changes upward if necessary.</li>
+  </ol>
+</ol>
+<b>Key Observation:</b> Deletion only modifies leaf nodes and updates routing information in non-leaf nodes, never removing entries from the latter.
+<br><br>
+The B+ Tree's structure makes it particularly well-suited for systems requiring efficient range queries and where data primarily resides on disk or other high-latency storage media. Its ability to maintain a shallow, wide structure allows for minimized I/O operations in large datasets, a critical factor in database and file system performance.
+
+<hr>
 </p>
 
 
 <h3><b>Optimizing insertions for B+ Trees</b></h3>
-<p>Now optimizations is where we do have to remember the heirarchical structure of the memory</p>
+<p style='color:grey'>Now optimizations is where we do have to remember the heirarchical structure of the memory</p>
 <p>
 Standard B+ Tree implementations, while theoretically elegant, often suffer from severe performance degradation when faced with real-world, high-throughput scenarios. Let's dissect the primary bottlenecks:
 <ul>
@@ -161,10 +195,10 @@ Standard B+ Tree implementations, while theoretically elegant, often suffer from
 </ul>
 The root cause of these inefficiencies lies in the use of <b>randomly distributed key indices</b>. This randomness, while beneficial for even distribution, wreaks havoc on locality of reference and predictable access patterns.
 </p>
+<hr>
 <p>
-Leveraging Sorted Insertions for Optimized Performance : 
+<b>Leveraging Sorted Insertions for Optimized Performance : </b>
 
-Implementing a sorted insertion strategy can mitigate these issues substantially:
 <ol>
   <li><b><i>Localized Page Access</i></b>: By maintaining insertions on the rightmost path of the tree, we dramatically improve cache utilization. This approach allows for prefetching and reduces TLB misses.</li>
   <li><b><i>Controlled Fill Factor</i></b>: Sorted insertions enable precise control over leaf node utilization. By maintaining a higher fill factor (e.g., 80-90%), we can significantly reduce the overall tree depth and improve space efficiency.</li>
@@ -173,7 +207,8 @@ Implementing a sorted insertion strategy can mitigate these issues substantially
 
 </p>
 <p>
-UUIDv7: The Nexus of Uniqueness and Sortability
+<hr>
+<b>UUIDv7: Uniqueness and Sortability</b>
 The advent of UUIDv7 provides an elegant solution to the seemingly contradictory requirements of unique identifiers and sortable keys. By encoding a high-precision timestamp in the most significant bits, UUIDv7 offers:
 
 <ol>
@@ -183,11 +218,13 @@ The advent of UUIDv7 provides an elegant solution to the seemingly contradictory
 
 this is where UUIDv7 comes in, with this the first segment of the alphanumeric is not random but rather the UNIX time, which in turn makes the UUIDs sortable, which enables us to use the above stated optimizations 
 </ol>
+
+<hr>
 </p>
 <h3>Empirical Observations and Hypotheses</h3>
 <p>While the exact implementations of large-scale object storage systems like AWS S3 or Cloudflare R2 are not public, observed behavior suggests potential B+ Tree-like underpinnings. Specifically, the correlation between bucket size and post-handshake upload latency hints at tree rebalancing operations as a potential bottleneck.
 </p>
-<p>Given that a production-grade B+ Tree with a depth of 2 can easily accommodate millions of entries, the optimizations proposed here could yield significant benefits:
+<p>Given that a production-grade B+ Tree with a depth of 2 can easily accommodate around 10 billion entries, the optimizations proposed here could yield significant benefits:
 
 <ol>
   <li><b>Reduced Rebalancing Frequency</b>: Sorted insertions naturally lead to fewer tree restructuring operations.</li>
@@ -203,10 +240,11 @@ Future research directions might include:
 
 <ul>
   <li>Adaptive algorithms that dynamically adjust between random and sorted insertion strategies based on observed workload patterns.</li>
-  <li>Integration with emerging storage technologies like ZNS SSDs to further optimize physical data layout.</li>
+  <li>Integration with emerging storage technologies like ZNS SSDs to further optimize physical data layout.(most likely they use zoned drives)</li>
   <li>Exploration of hybrid data structures that combine the strengths of B+ Trees with other indexing mechanisms for specific use cases.</li>
 </ul>
 As we continue to push the boundaries of large-scale data management, such optimizations will become increasingly crucial. The intersection of data structure design, systems architecture, and hardware characteristics remains a fertile ground for innovation in the pursuit of performant and scalable storage solutions.</p>
+<hr>
 <h5> Related Work </h5>
 <p style="font-size:12px">arXiv:2404.11120, arXiv:2404.04650, arXiv:2312.08872 and others have aimed to optimize the initial noise to produce images that better align with the text prompt, reduce visual artifacts, or achieve a desired layout
     </body>
