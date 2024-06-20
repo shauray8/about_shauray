@@ -139,20 +139,33 @@ The compexity comes where the node y is full before the insertion, it must be sp
   <li>A pointer to the new node z and a new router value are inserted to node x which is the parent of both y and z. A good choice for the new router value is the last key value in y.</li>
   <li>If there is not enough space for a new pointer and router value in x, x must be split. In the worst case, all nodes in the path from the leaf to the root must be split which is rather intresting as with B+ Trees we grow the root rather then growing the leaves</li>
   <br>
-  <li></li>
+  <li>while deletion, we do not remove the key value from non-leaf nodes </li>
   <li>the first t keys of node y are left in y</li>
   <li>the last t keys of node y are transferred to the new node z.</li>
   <li>the key k is inserted to either nodee y or z according to the value of k</li>
   <li>A pointer to the new node z and a new router value are inserted to node x which is the parent of both y and z. A good choice for the new router value is the last key value in y.</li>
   <li>If there is not enough space for a new pointer and router value in x, x must be split. In the worst case, all nodes in the path from the leaf to the root must be split which is rather intresting as with B+ Trees we grow the root rather then growing the leaves</li>
 </ul>
-Now beacause the B+ Tree satisfies the given balance condition, we can prove that the height h of the B+ Tree 
-h less then or equal to logtn
 </p>
 
 
 <h3>Optimizing insertions for B+ Trees</h3>
-<p>Moving on to the core focus of the this blog: Seeds play a crucial role in this process. Each seed initializes the random number generator that produces the initial noise and the noise added at each reverse diffusion step. Consequently, the choice of seed can lead to vastly different generated images even for the same textual description</p>
+<p>Now optimizations is where we do have to remember the heirarchical structure of the memory, keeping that in mind insertions or deletions on a B+ Tree can be optimized to some extent, some of the issues that should be optimized are : </p>
+<p>
+<ul>
+  <li>Constantly need to search from root</li>
+  <li>Modifying random pages: poor cache efficiency</li>
+  <li>leaves poorly utilized (typically half empty) pages</li>
+</ul>
+Now all of this boils down to using random key indices as we 1. search random pages everytime for which the cache has to bring up different sections of tree into memory everytime an insertion is called 2. which then results in poor cache efficiency and 3. might leave the nodes half empty through the process 
+
+<br>
+
+Now sorting can in theory solve these problems, as we can now fill up every leaf node to it's desired fill factor, 1. with this approch we never touch the left hand side of the tree, through which we optimize our cache utilization, 2. with this method we can control the fill factor for every leaf page which in turn optimized the utilization of the leaf node and 3. the layout of the leaf nodes are much more sequential on the disk
+
+this is where UUIDv7 comes in, with this the first segment of the alphanumeric is not random but rather the UNIX time, which in turn makes the UUIDs sortable, which enables us to use the above stated optimizations 
+
+</p>
 <h3>Thoughts</h3>
 <p>To illustrate the profound impact of seeds, let's consider two examples:
 <ul>
