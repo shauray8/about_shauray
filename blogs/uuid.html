@@ -59,15 +59,15 @@
 }
 </style>
 
-<p>It's time to dive into the wild, wacky, and sometimes downright infuriating world of UUIDs. Yes, those strings of alphanumeric chaos that we love to hate and hate to love We're not here to explain what UUIDs are (Google that if you must), but rather to vent, rant, and explore some wild ideas about how V7 can help in some ways, specially with S3s (S3s requires a seperate rant of it's own)</p>
+<p>It's time to dive into the wild, wacky, and sometimes downright infuriating world of UUIDs. Yes, those strings of alphanumeric chaos that we love to hate and hate to love We're not here to explain what UUIDs are (Google that if you must), but rather to vent, rant, and explore some wild ideas about how V7 can help in some ways, specially with S3s (S3s requires a separate rant of its own)</p>
 <h3>A quick overview of what a mess of versions it is !</h3>
-<p>I really like this illustration from <a href='https://www.youtube.com/@t3dotgg/'>@t3dotgg</a> and this post <a href='https://planetscale.com/blog/the-problem-with-using-a-uuid-primary-key-in-mysql'>The Problem with Using a UUID Primary Key in MySQL</a> will give you a very good explaination of how messed up this is, which basically translates to, <br> </p>
+<p>I really like this illustration from <a href='https://www.youtube.com/@t3dotgg/'>@t3dotgg</a> and this post <a href='https://planetscale.com/blog/the-problem-with-using-a-uuid-primary-key-in-mysql'>The Problem with Using a UUID Primary Key in MySQL</a> will give you a very good explanation of how messed up this is, which basically translates to, <br> </p>
 <ul>
   <li> <b>UUIDv1</b> - Uses the Gregorian calendar &#x1F937;&#x200D;&#x2642;&#xFE0F; segments looks like <b>['time_low'-'time_mid'-'time_low_and_version'-'clock_seq_and_version'-'node'] </b>- now using the Gregorian calendar is not the biggest issues here, rather they had the biggest segment set to <b>'node'</b> which is the unique address of the system generating the UUID. I'm no security expert but this looks bad </li>
   <br>
-  <li> <b>UUIDv2</b> - nothing intresting here, they replaced the <b>'low_time'</b> component of the UUID with POSIX user ID </li>
+  <li> <b>UUIDv2</b> - nothing interesting here, they replaced the <b>'low_time'</b> component of the UUID with POSIX user ID </li>
   <br>
-  <li><b>UUIDv3 and v5</b> - they started using a <b>128bit</b> hash and both versions use a different hash MD5 and SHA1 repectively, the intresting part here is that V3 and V5 is similar but not V4, and V4 is what is widely used</li>
+  <li><b>UUIDv3 and v5</b> - they started using a <b>128bit</b> hash and both versions use a different hash MD5 and SHA1 respectively, the interesting part here is that V3 and V5 is similar but not V4, and V4 is what is widely used</li>
   <br>
   <li><b>UUIDv4</b> - this is what most of the population uses for there random keys and in my opinion this is the simplest of them all, <b>it just uses a set of random alphanumerics</b>, with an exception that the first position of the 3rd segment is always set to the version number (seen throughout the versions) </li>
   <br>
@@ -82,17 +82,17 @@
 <h3>UUIDv7 and Simple Storage Solutions (or databases in general)</h3>
 <p>Moving forward we will mostly discuss on databases, optimizations through the tree structure used in modern databases and a lot of what I thought through the week (might be very dumb), so read the related papers mentioned below in order to get a better understanding of things</p>
 <h3>Trees 101</h3>
-<p>Now Trees, with there hierarchical strcutre, play a pivotal role in all of computer science in my opinion also providing a backbone for storing indeces for huge databases, (If you don't know about Trees consider taking one of the MIT OCW courses on data structres), for now we will talk about B-Trees often called as balanced trees but it's not really known that the B stands for in the B-Trees, also we'll talk about B+ Trees which is a much more widely accepted data structure when storing huge amounts of data </p>
+<p>Now Trees, with there hierarchical structure, play a pivotal role in all of computer science in my opinion also providing a backbone for storing indices for huge databases, (If you don't know about Trees consider taking one of the MITOCW courses on data structures), for now we will talk about B-Trees often called as balanced trees but it's not really known that the B stands for in the B-Trees, also we'll talk about B+ Trees which is a much more widely accepted data structure when storing huge amounts of data </p>
 
 <h3>B Trees</h3>
 <p>Assuming you know about BSTs, we'll work with a modification of that consider that now every node can store two keys, now you have 3 paths to take when searching for a key very similar to what you would do for a binary search tree, now to formalize this, each node in a B-Tree of order \( d \) contains at most \( 2d \) keys and \(2d+1\) pointers as shown below, now the keys can vary from node to node, but each must have at least \( d \) keys and \( d+1 \) pointers, such that every node is atleast half full.</p>
 <img src="./assets/btree.png" width='100%'></img>
-<p><b>Balancing a B-Tree</b> : with BST random insertions can leave a tree unbalanced which in turn makes it harder to find a key(atleast the worst case senario), with B-Trees the longest path is \( log_{d}n \), now with this you will never visit more then \( 1+log_{d}n \) nodes</p>
+<p><b>Balancing a B-Tree</b> : with BST random insertions can leave a tree unbalanced which in turn makes it harder to find a key(atleast the worst case scenario), with B-Trees the longest path is \( log_{d}n \), now with this you will never visit more then \( 1+log_{d}n \) nodes</p>
 <img src='./assets/complex.png' width='100%'></img>
 <p><b>Insertion</b> : First, a find proceeds from the root to locate the proper leaf for insertion. Then the insertion is performed, and balance is restored by a procedure which moves from the leaf back toward the root.</p>
 <p><b>Deletion</b> : Deletion in a B-tree also requires a find operation to locate the proper node. There are then two possibilities - <br><b> 1.</b> the key to be deleted resides in a leaf, or<br><b> 2.</b> the key resides in a nonleaf node. A nonleaf deletion requires that an adjacent key be found and swapped into the vacated position so that it finds work correctly</p>
 
-<p>Now with these there is a notion of underflow in the leaves as a minimum of d keys is required so in order to restore the balance a key is borrowed from its neighbour, and if there are'nt enough keys to destribute a concatenate happens to restore the balance</p>
+<p>Now with these there is a notion of underflow in the leaves as a minimum of d keys is required so in order to restore the balance a key is borrowed from its neighbour, and if there are'nt enough keys to distribute a concatenate happens to restore the balance</p>
 <hr>
 <h3>B+ Trees</h3>
 <p>B+ Trees are a sophisticated evolution of the B-Tree, optimized for efficient range queries and disk-based storage systems. The key distinction lies in the separation of routing and data:
@@ -184,7 +184,7 @@ The B+ Tree's structure makes it particularly well-suited for systems requiring 
 
 
 <h3><b>Optimizing insertions for B+ Trees</b></h3>
-<p style='color:grey'>Now optimizations is where we do have to remember the heirarchical structure of the memory</p>
+<p style='color:grey'>Now optimizations is where we do have to remember the hierarchical structure of the memory</p>
 <p>
 Standard B+ Tree implementations, while theoretically elegant, often suffer from severe performance degradation when faced with real-world, high-throughput scenarios. Let's dissect the primary bottlenecks:
 <ul>
