@@ -86,6 +86,7 @@
 <p>Now Trees, with there hierarchical strcutre, play a pivotal role in all of computer science in my opinion also providing a backbone for storing indeces for huge databases, (If you don't know about Trees consider taking one of the MIT OCW courses on data structres), for now we will talk about B-Trees often called as balanced trees but it's not really known that the B stands for in the B-Trees, also we'll talk about B+ Trees which is a much more widely accepted data structure when storing huge amounts of data </p>
 
 <h4>B Trees</h4>
+<p>! Keeping in mind that the memory is not contiguous rather heirarchical !</p>
 <p>Assuming you know about BSTs, we'll work with a modification of that consider that now every node can store two keys, now you have 3 paths to take when searching for a key very similar to what you would do for a binary search tree, now to formalize this, each node in a B-Tree of order d contains at most 2d keys and 2d+1 pointers as shown below, now the keys can vary from node to node, but each must have at least d keys and d+1 pointers, such that every node is atleast half full</p>
 <img src="./assets/btree.png" width='100%'></img>
 <p>Balancing a B-Tree : with BST random insertions can leave a tree unbalanced which in turn makes it harder to find a key(atleast the worst case senario), with B-Trees the longest path is logdn, now with this you will never visit more then 1+logdn nodes</p>
@@ -96,17 +97,59 @@
 <p>Now with these there is a notion of underflow in the leaves as a minimum of d keys is required so in order to restore the balance a key is borrowed from its neighbour, and if there are'nt enough keys to destribute a concatenate happens to restore the balance</p>
 
 <h4>B+ Trees</h4>
-<p>The reverse diffusion process, guided by a pre-trained model, aims to denoise the noisy latent variables step-by-step, eventually reconstructing a high-quality image. This is expressed as:</p>
+<p>With B+ Tree, all the keys reside in the leaves, the upper levels , which are organized as a B-Tree, consists only of the index.</p>
 <p>
-    \(p_\theta(x_{t-1} \mid x_t, \mathbf{s}) = \mathcal{N}(x_{t-1}; \mu_\theta(x_t, t, \mathbf{s}), \Sigma_\theta(x_t, t, \mathbf{s}))\) where:
-</p>
+Structure of B+ Tree
 <ul>
-    <li>\(\mu_\theta(x_t, t, \mathbf{s})\) is the predicted mean, influenced by the current state \(x_t\), timestep \(t\), and the seed \(\mathbf{s}\).</li>
-    <li>\(\Sigma_\theta(x_t, t, \mathbf{s})\) is the predicted variance.</li>
-    <li>\(\mathbf{s}\) is the seed, which ensures the process is stochastic but repeatable.</li>
+  <b>If a node is a non-leaf node:</b>
+  <li>x.n the number of route values currently stored in node x</li>
+  <li>the route values stored in node x in increasing order - x.router1 &lt; x.router2 </li>
+  <li>x.leaf, a boolean field whose value is FALSE meaning that x is a non-leaf node</li>
+  <li>x.n + 1 pointers x.c1, x.c2 ... x.cx.n+1 to the children of x</li>
+
+  <b>If a node is a leaf node:</b>
+  <li>x.n number of key values currently stored in x</li>
+  <li>the key value stored in node x in increasing order : x.key1 &lt; x.key2</li>
+  <li>x.leaf, a boolean field whose value is TRUE meaning that x is a leaf node</li>
 </ul>
+<img src="./assets/bplusacc.png" width="100%"></img>
+<p>Some intresting properties of a B+ Tree :</p>
+<p>
+<ul>
+  <li>every leaf node has the same depth which is the height of the tree</li>
+  <li>Every node of the B+-tree except the root node is at least half-filled.</li>
+  <br>
+  <p style="color:green">Very similar to what a B-Tree has</p>
+</ul>
+Now beacause the B+ Tree satisfies the given balance condition, we can prove that the height h of the B+ Tree 
+h less then or equal to logtn
 </p>
-<p style="color: orange"><b>[Appendix A]</b></p>
+<p>Also searching in a B+ Tree is very similar to how a B-Trees does it, with an exception being that it always terminates at the leaf node</p>
+
+<p>Insertion and Deletion for B+ Trees</p>
+<p>
+The insertion of the key k to a B+-tree is started by searching for the leaf node y which should contain k. This is performed in the same way as when performing the B+-tree-search operation. If there is enough space in y to insert the key k, k is inserted and no other actions are needed
+
+The compexity comes where the node y is full before the insertion, it must be split as follows:
+<ul>
+  <li>We allocate memory for a new node z.</li>
+  <li>the first t keys of node y are left in y</li>
+  <li>the last t keys of node y are transferred to the new node z.</li>
+  <li>the key k is inserted to either nodee y or z according to the value of k</li>
+  <li>A pointer to the new node z and a new router value are inserted to node x which is the parent of both y and z. A good choice for the new router value is the last key value in y.</li>
+  <li>If there is not enough space for a new pointer and router value in x, x must be split. In the worst case, all nodes in the path from the leaf to the root must be split which is rather intresting as with B+ Trees we grow the root rather then growing the leaves</li>
+  <br>
+  <li></li>
+  <li>the first t keys of node y are left in y</li>
+  <li>the last t keys of node y are transferred to the new node z.</li>
+  <li>the key k is inserted to either nodee y or z according to the value of k</li>
+  <li>A pointer to the new node z and a new router value are inserted to node x which is the parent of both y and z. A good choice for the new router value is the last key value in y.</li>
+  <li>If there is not enough space for a new pointer and router value in x, x must be split. In the worst case, all nodes in the path from the leaf to the root must be split which is rather intresting as with B+ Trees we grow the root rather then growing the leaves</li>
+</ul>
+Now beacause the B+ Tree satisfies the given balance condition, we can prove that the height h of the B+ Tree 
+h less then or equal to logtn
+</p>
+
 
 <h3>Optimizing insertions for B+ Trees</h3>
 <p>Moving on to the core focus of the this blog: Seeds play a crucial role in this process. Each seed initializes the random number generator that produces the initial noise and the noise added at each reverse diffusion step. Consequently, the choice of seed can lead to vastly different generated images even for the same textual description</p>
