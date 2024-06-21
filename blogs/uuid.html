@@ -201,7 +201,7 @@ The root cause of these inefficiencies lies in the use of <b>randomly distribute
 
 <ol>
   <li><b><i>Localized Page Access</i></b>: By maintaining insertions on the rightmost path of the tree, we dramatically improve cache utilization. This approach allows for prefetching and reduces TLB misses.</li>
-  <li><b><i>Controlled Fill Factor</i></b>: Sorted insertions enable precise control over leaf node utilization. By maintaining a higher fill factor (e.g., 80-90%), we can significantly reduce the overall tree depth and improve space efficiency.</li>
+  <li><b><i>Controlled Fill Factor</i></b>: Sorted insertions enable precise control over leaf node utilization. By maintaining a higher fill factor (e.g., 80-90%), we can significantly reduce the overall tree depth and improve space efficiency.Typically in large systems B+ Trees are 2/3rd's of the way full.</li>
   <li><b><i>Sequential Disk Layout</i></b>: Sorted keys naturally lead to a more contiguous on-disk representation of leaf nodes. This alignment with underlying storage characteristics can yield substantial I/O performance gains, especially on HDDs or SMR drives.</li>
 </ol>
 
@@ -246,6 +246,13 @@ Future research directions might include:
 As we continue to push the boundaries of large-scale data management, such optimizations will become increasingly crucial. The intersection of data structure design, systems architecture, and hardware characteristics remains a fertile ground for innovation in the pursuit of performant and scalable storage solutions.</p>
 <hr>
 <h5> Related Work </h5>
-<p style="font-size:12px">arXiv:2404.11120, arXiv:2404.04650, arXiv:2312.08872 and others have aimed to optimize the initial noise to produce images that better align with the text prompt, reduce visual artifacts, or achieve a desired layout
+<p style="font-size:12px">
+<a>https://web.archive.org/web/20210414050947/https://www.cs.helsinki.fi/u/mluukkai/tirak2010/B-tree.pdf</a> <br>
+<a>https://dl.acm.org/doi/pdf/10.1145/356770.356776</a> <br>
+<a>https://planetscale.com/blog/the-problem-with-using-a-uuid-primary-key-in-mysql</a> <br>
+<a>https://www.youtube.com/watch?v=NcuORWy48Qk&list=PLzzVuDSjP25QT0H605qxlcmMy_GBTHi8X</a> <br>
+<a>https://www.youtube.com/watch?v=CYKRMz8yzVU&t=62s</a><br>
+<a>https://www.youtube.com/watch?v=9QPr8Ufzt5M&t=636s</a> <br>
+</p>
     </body>
 </html>
