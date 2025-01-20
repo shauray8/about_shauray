@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>UUIDs - Mess Within a Widely Used Standard</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="Optimizing databases with UUIDs, specifically the B+ Tree">
+    <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Shauray Singh blog posts" />
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="main.css">
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-1DD05WB973"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-ZHQ68Z8NS3');
+    </script>
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+
+  <div class="wrap">
+
+    <a class="site-title" href="./blog.html">We Must Know, We Will Know</a>
+    
+</header>
+
+
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>UUIDs - Mess Within a Widely Used Standard</h1>
+    <p class="meta">Jun 21, 2024</p>
+  </header>
+
+  <article class="post-content">
+  <style>
+.post-header h1 {
+    font-size: 35px;
+}
+.post pre,
+.post code {
+    background-color: #fcfcfc;
+    font-size: 13px; /* make code smaller for this post... */
+}
+</style>
+
+<p>It's time to dive into the wild, wacky, and sometimes downright infuriating world of UUIDs. Yes, those strings of alphanumeric chaos that we love to hate and hate to love We're not here to explain what UUIDs are (Google that if you must), but rather to vent, rant, and explore some wild ideas about how V7 can help in some ways, specially with S3s (S3s requires a separate rant of its own)</p>
+<h3>A quick overview of what a mess of versions it is !</h3>
+<p>I really like this illustration from <a href='https://www.youtube.com/@t3dotgg/'>@t3dotgg</a> and this post <a href='https://planetscale.com/blog/the-problem-with-using-a-uuid-primary-key-in-mysql'>The Problem with Using a UUID Primary Key in MySQL</a> will give you a very good explanation of how messed up this is, which basically translates to, <br> </p>
+<ul>
+  <li> <b>UUIDv1</b> - Uses the Gregorian calendar &#x1F937;&#x200D;&#x2642;&#xFE0F; segments looks like <b>['time_low'-'time_mid'-'time_low_and_version'-'clock_seq_and_version'-'node'] </b>- now using the Gregorian calendar is not the biggest issues here, rather they had the biggest segment set to <b>'node'</b> which is the unique address of the system generating the UUID. I'm no security expert but this looks bad </li>
+  <br>
+  <li> <b>UUIDv2</b> - nothing interesting here, they replaced the <b>'low_time'</b> component of the UUID with POSIX user ID </li>
+  <br>
+  <li><b>UUIDv3 and v5</b> - they started using a <b>128bit</b> hash and both versions use a different hash MD5 and SHA1 respectively, the interesting part here is that V3 and V5 is similar but not V4, and V4 is what is widely used</li>
+  <br>
+  <li><b>UUIDv4</b> - this is what most of the population uses for there random keys and in my opinion this is the simplest of them all, <b>it just uses a set of random alphanumerics</b>, with an exception that the first position of the 3rd segment is always set to the version number (seen throughout the versions) </li>
+  <br>
+  <li><b>UUIDv6</b> - now V6 is very similar to V1 flipping the timestamps, meaning the most significant portions of the timestamp are stored first. now in turn this makes it a little more <b>sortable</b>, since the most significant portion of the timestamp is upfront</li>
+  <br>
+  <li><b>UUIDv7</b> - now this is the only version I can think of using in come cases instead of V4, this basically finally uses the <b>UNIX timestamp</b> instead of the Gregorian calendar and the rest of the string is just random alphanumerics, which makes it less trackable back to their source and this is what we will discuss moving forward</li>
+  <br>
+  <li><b>UUIDv8</b> - this permits vendor-specific implementations while adhering to RFC standards and the illustration says its more of a vibe then a standard now</li>
+</ul>
+
+<img src="./assets/uuid.png", width='100%'></img>
+<h3>UUIDv7 and Simple Storage Solutions (or databases in general)</h3>
+<p>Moving forward we will mostly discuss on databases, optimizations through the tree structure used in modern databases and a lot of what I thought through the week (might be very dumb), so read the related papers mentioned below in order to get a better understanding of things</p>
+<h3><b>Trees 101</b></h3>
+<p>Now Trees, with there hierarchical structure, play a pivotal role in all of computer science in my opinion also providing a backbone for storing indices for huge databases, (If you don't know about Trees consider taking one of the MITOCW courses on data structures), for now we will talk about B-Trees often called as balanced trees but it's not really known that what B stands for in the B-Trees, also we'll talk about B+ Trees which is a much more widely accepted data structure when storing huge amounts of data </p>
+
+<h3>B Trees</h3>
+<p>Assuming you know about BSTs, we'll work with a modification of that consider that now every node can store two keys, now you have 3 paths to take when searching for a key very similar to what you would do for a binary search tree, now to formalize this, each node in a B-Tree of order \( d \) contains at most \( 2d \) keys and \(2d+1\) pointers as shown below, now the keys can vary from node to node, but each must have at least \( d \) keys and \( d+1 \) pointers, such that every node is atleast half full.</p>
+<img src="./assets/btree.png" width='100%'></img>
+<p><b>Balancing a B-Tree</b> : with BST random insertions can leave a tree unbalanced which in turn makes it harder to find a key (atleast the worst case scenario), with B-Trees the longest path is \( log_{d}n \), now with this you will never visit more then \( 1+log_{d}n \) nodes</p>
+<img src='./assets/complex.png' width='100%'></img>
+<p style='font-size:11px; margin-top:-14px'>Left : Binary Search Tree worst case scenario, RIGHT : B+ Tree : worst case scenatio or in this case its the only scenario</p>
+<p><b>Insertion</b> : First, a find proceeds from the root to locate the proper leaf for insertion. Then the insertion is performed, and balance is restored by a procedure which moves from the leaf back toward the root.</p>
+<p><b>Deletion</b> : Deletion in a B-tree also requires a find operation to locate the proper node. There are then two possibilities - <br><b> 1.</b> the key to be deleted resides in a leaf, or<br><b> 2.</b> the key resides in a nonleaf node. A nonleaf deletion requires that an adjacent key be found and swapped into the vacated position so that it finds work correctly</p>
+
+<p>Now with these there is a notion of underflow in the leaves as a minimum of \( d \) keys is required so in order to restore the balance a key is borrowed from its neighbour, and if there are'nt enough keys to distribute a concatenate happens to restore the balance</p>
+<hr>
+<h3>B+ Trees</h3>
+<p>B+ Trees are a sophisticated evolution of the B-Tree, optimized for efficient range queries and disk-based storage systems. The key distinction lies in the separation of routing and data:
+
+<ul>
+  <li><b>Leaf Nodes</b>: Contain all key-value pairs in sorted order.</li> 
+  <li><b>Non-Leaf Nodes</b>: Serve as an index structure, containing only routing information.</li>
+</ul>
+
+<img src="./assets/bpt.png", width='100%'></img>
+</p>
+<p>
+<b>Non-Leaf Node (\( x \))</b>
+<ul>
+  <li>\( x.n \) : Number of router values</li>
+  <li>\( x.router[1..n] \) : Sorted router values \( (x.router[i] &lt; x.router[i+1]) \)</li>
+  <li>\( x.leaf \) : Boolean flag set to \( FALSE \)</li>
+  <li>\( x.c[1..n+1] \) : Pointers to child nodes</li>
+</ul>
+<b>Leaf Node (\( x \)):</b>
+<ul>
+  <li> \( x.n \) : Number of key-value pairs</li>
+  <li> \( x.key[1..n] \) : Sorted key values \( (x.key[i] &lt; x.key[i+1]) \)</li>
+  <li> \( x.leaf \) : Boolean flag set to \( TRUE \)</li>
+  <li> \( x.next \) : Pointer to the next leaf node (for range queries)</li>
+</ul>
+
+<img src="./assets/bplusacc.png" width="100%"></img>
+<p style='font-size:11px; margin-top:-14px'>A B+ Tree with sequential pages [Doubly Linked List] at its leaf level, some papers do link the non-leaf nodes as well so that is being shown using dotted connections</p>
+<p><b>Critical Properties:</b></p>
+<p>
+<ol>
+  <li><b>Depth Uniformity</b>: All leaf nodes reside at the same depth, defining the tree's height</li>
+  <li><b>Minimum Occupancy</b>: Every non-root node is at least half-filled, ensuring balanced tree structure</li>
+  <li><b>Bounded Height</b>: For a tree of order \( t \), the height \( h ≤ log_{t}(n) \), where n is the number of keys.</li>
+</ol>
+</p>
+<p>The search algorithm traverses from root to leaf, similar to B-Trees, with the key distinction that it always terminates at a leaf node. This property ensures consistent search time complexity.
+</p>
+
+<hr>
+<p><b>Insertion</b></p>
+<p>
+<ol>
+  <li>Locate target leaf node y via search algorithm.</li>
+  <li>If y has available space, insert key k and terminate.</li>
+  <li>If y is full:
+    <ol type='a'>
+    <li>Allocate new node z.</li>
+      <li>Distribute keys:
+        <ul>
+          <li>First t keys remain in y.</li>
+          <li>Last t keys transfer to z.</li>
+        </ul>
+      </li>
+    </ol>
+  </li>
+  <li> Insert k into appropriate node (y or z).</li>
+  <li>Update parent node x:
+    <ul>
+    <li>Insert pointer to z and new router value (typically last key in y).</li>
+      <li>If x lacks space, recursively split upwards.</li>
+    </ul>
+  </li>
+</ol>
+
+Notably, B+ Trees propagate splits upward, potentially growing the root, in contrast to downward growth in some other structures.
+<hr>
+</p>
+
+<p><b>Deletion</b></p>
+<p>
+<ol>
+  <li>Locate and remove key from leaf node.</li>
+  <li>If underflow occurs:</li>
+  <ol type="a">
+    <li>Attempt redistribution with sibling nodes.</li>
+    <li>If redistribution fails, merge with a sibling.</li>
+    <li>Update parent routing information.</li>
+  <li>Propagate changes upward if necessary.</li>
+  </ol>
+</ol>
+<b>Key Observation:</b> Deletion only modifies leaf nodes and updates routing information in non-leaf nodes, never removing entries from the latter.
+<br><br>
+The B+ Tree's structure makes it particularly well-suited for systems requiring efficient range queries and where data primarily resides on disk or other high-latency storage media. Its ability to maintain a shallow, wide structure allows for minimized I/O operations in large datasets, a critical factor in database and file system performance.
+
+<hr>
+</p>
+
+
+<h3><b>Optimizing insertions for B+ Trees</b></h3>
+<p style='color:grey'>Now optimizations is where we do have to remember the hierarchical structure of the memory</p>
+<p>
+Standard B+ Tree implementations, while theoretically elegant, often suffer from severe performance degradation when faced with real-world, high-throughput scenarios. Let's dissect the primary bottlenecks:
+<ul>
+  <li><b>Root-to-leaf Traversal Overhead</b>: Each random insertion necessitates a complete traversal from root to leaf. In large-scale systems, this results in \( O(log n) \) I/O operations per insertion, which becomes prohibitively expensive as \( n \) grows.</li>
+  <li><b>Cache-Unfriendly Random Page Modifications </b>: The stochastic nature of insertions leads to unpredictable page modifications across the tree structure. This behavior is anathema to modern CPU cache architectures, resulting in frequent cache misses and suboptimal memory access patterns.
+</li>
+<li><b>Underutilized Leaf Nodes</b> : Typical B+ Tree implementations maintain leaves at approximately 50% capacity to facilitate splits and merges. While this simplifies rebalancing operations, it leads to significant wasted space and increased tree depth.</li>
+</ul>
+The root cause of these inefficiencies lies in the use of <b>randomly distributed key indices</b>. This randomness, while beneficial for even distribution, wreaks havoc on locality of reference and predictable access patterns.
+</p>
+<hr>
+<p>
+<b>Leveraging Sorted Insertions for Optimized Performance : </b>
+
+<ol>
+  <li><b><i>Localized Page Access</i></b>: By maintaining insertions on the rightmost path of the tree, we dramatically improve cache utilization. This approach allows for prefetching and reduces TLB misses and we can ignore the left most part of the tree atleast when it comes to Insertions.</li>
+  <li><b><i>Controlled Fill Factor</i></b>: Sorted insertions enable precise control over leaf node utilization. By maintaining a higher fill factor (e.g., 80-90%), we can significantly reduce the overall tree depth and improve space efficiency.Typically in large systems B+ Trees are 2/3rd's of the way full.</li>
+  <li><b><i>Sequential Disk Layout</i></b>: Sorted keys naturally lead to a more contiguous on-disk representation of leaf nodes. This alignment with underlying storage characteristics can yield substantial I/O performance gains, especially on HDDs or SMR drives.</li>
+</ol>
+
+</p>
+<p>
+<hr>
+<b>UUIDv7: Uniqueness and Sortability</b>
+The advent of UUIDv7 provides an elegant solution to the seemingly contradictory requirements of unique identifiers and sortable keys. By encoding a high-precision timestamp in the most significant bits, UUIDv7 offers:
+
+<ol>
+  <li> <b>Temporal Sorting</b>: Keys are naturally ordered by creation time, facilitating the sorted insertion optimizations discussed above.</li>
+  <li> <b>Maintained Uniqueness</b>: The inclusion of random bits ensures collision resistance even in high-concurrency environments.</li>
+  <li> <b>Distributed Generation</b>: UUIDs can be generated without coordination, crucial for distributed systems.</li>
+
+this is where UUIDv7 comes in, with this the first segment of the alphanumeric is not random but rather the UNIX time, which in turn makes the UUIDs sortable, which enables us to use the above stated optimizations 
+</ol>
+
+<hr>
+</p>
+<h3>Empirical Observations and Hypotheses</h3>
+<p>While the exact implementations of large-scale object storage systems like AWS S3 or Cloudflare R2 are not public, observed behavior suggests potential B+ Tree-like underpinnings. Specifically, the correlation between bucket size and post-handshake upload latency hints at tree rebalancing operations as a potential bottleneck.
+</p>
+<p>Given that a production-grade B+ Tree with a depth of 2 can easily accommodate around 10 billion entries, the optimizations proposed here could yield significant benefits:
+
+<ol>
+  <li><b>Reduced Rebalancing Frequency</b>: Sorted insertions naturally lead to fewer tree restructuring operations.</li>
+  <li><b>Improved Cache Efficiency</b>: By localizing insertions to a specific region of the tree, we can maintain critical pages in cache for extended periods.</li>
+  <li><b>Enhanced I/O Patterns</b>: The more predictable nature of insertions allows for more effective I/O scheduling and potential write coalescing.</li>
+</ol>
+
+</p>
+<h3>Conclusion and Future Directions</h3>
+<p>While these optimizations offer substantial improvements, they are not a panacea for all storage system designs. The efficacy of these approaches depends heavily on workload characteristics and system requirements.
+
+Future research directions might include:
+
+<ul>
+  <li>Adaptive algorithms that dynamically adjust between random and sorted insertion strategies based on observed workload patterns.</li>
+  <li>Integration with emerging storage technologies like ZNS SSDs to further optimize physical data layout.(most likely they use zoned drives)</li>
+  <li>Exploration of hybrid data structures that combine the strengths of B+ Trees with other indexing mechanisms for specific use cases.</li>
+</ul>
+As we continue to push the boundaries of large-scale data management, such optimizations will become increasingly crucial. The intersection of data structure design, systems architecture, and hardware characteristics remains a fertile ground for innovation in the pursuit of performant and scalable storage solutions.</p>
+<hr>
+<h5> Related Work </h5>
+<p style="font-size:12px">
+<a>https://web.archive.org/web/20210414050947/https://www.cs.helsinki.fi/u/mluukkai/tirak2010/B-tree.pdf</a> <br>
+<a>https://dl.acm.org/doi/pdf/10.1145/356770.356776</a> <br>
+<a>https://planetscale.com/blog/the-problem-with-using-a-uuid-primary-key-in-mysql</a> <br>
+<a>https://www.youtube.com/watch?v=NcuORWy48Qk&list=PLzzVuDSjP25QT0H605qxlcmMy_GBTHi8X</a> <br>
+<a>https://www.youtube.com/watch?v=CYKRMz8yzVU&t=62s</a><br>
+<a>https://www.youtube.com/watch?v=9QPr8Ufzt5M&t=636s</a> <br>
+</p>
+    </body>
+</html>
