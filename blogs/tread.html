@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Good Seed Makes a Good Crop</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="Discovering secret seeds in Text-to-Image Diffusion Models">
+    <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Shauray Singh blog posts" />
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="main.css">
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-1DD05WB973"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-RLJ3MKG26H');
+    </script>
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+
+  <div class="wrap">
+
+    <a class="site-title" href="./blog.html">We Must Know, We Will Know</a>
+    
+</header>
+
+
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>TREAD - Token Routing for Efficient Architecture-agnostic Diffusion Training</h1>
+    <p class="meta">Jun 8, 2024</p>
+  </header>
+
+  <article class="post-content">
+  <style>
+.post-header h1 {
+    font-size: 35px;
+}
+.post pre,
+.post code {
+    background-color: #fcfcfc;
+    font-size: 13px; /* make code smaller for this post... */
+}
+</style>
+
+<p>
+Diffusion models dominate visual generation, yet grapple with sample inefficiency and high training costs. Traditional diffusion transformers suffer from quadratic complexity, prompting research into token reduction through masking.TREAD <a href="https://arxiv.org/pdf/2501.04765">2501.04765</a> diverges by preserving token information through predefined routes that strategically reintroduce data in deeper model layers. By combining multiple routes and implementing an adaptive auxiliary loss, enhancing training efficiency without architectural modifications.
+</p>
+
+<h3>Quadratic Complexity</h3>
+<p>
+Starting off with the main problem the paper addresses - when a system has quadratic complexity relative to input length, it means the computational cost (time/memory) scales with the square of the input size. For example:
+<ul>
+  <li>If the input length is N, the cost grows as O(N²).</li>
+  <li>Doubling the input length (2N) quadruples the computational cost (4N²).</li>
+</ul>
+
+If the architecture scales quadratically with input length, training becomes prohibitively expensive for large inputs (e.g., high-resolution images, long videos). For instance:
+<ul>
+  <li>A 256×256 image split into 16×16 patches becomes 256 tokens.</li>
+    <li>A transformer would compute 256² = 65,536 interactions per layer.</li>
+</ul>
+
+One way of reducing such tokens is masking but the paper introduces avoiding token discarding:<br> 
+
+In many transformer architectures (especially for images/video), tokens (e.g., image patches) are discarded or merged early to reduce computational cost. For example: 
+<ul>
+  <li>Patch merging (e.g., in Vision Transformers): Combine neighboring patches into fewer tokens.</li>
+
+    <li>Token pruning: Remove "less important" tokens based on heuristics.</li>
+</ul>
+
+It risks losing fine-grained spatial or temporal information critical for tasks like image/video generation. Instead of discarding tokens, the authors store and reuse them via predefined pathways. Here’s how this works:
+
+<ul>
+  <li>Token Preservation: Early-layer tokens (e.g., high-resolution details) are stored in memory.</li>
+
+  <li>Reintroduction to Deeper Layers: These tokens are later fused with processed features at deeper layers (e.g., via skip connections or cross-attention).</li>
+
+  <li>Efficiency Gains: By avoiding recomputation of discarded tokens, the model retains critical information without the full quadratic cost at every layer.</li>
+</ul>
+<b>Analogy:</b> Highway Networks for Tokens
+Think of predefined routes as "highways" that let tokens bypass intermediate layers. They’re stored in a memory buffer and merged back into the main network at specific depths, avoiding unnecessary processing. This is similar to:
+
+Skip connections in ResNets (but for tokens, not feature maps).
+
+Cross-attention in transformers (where stored tokens act as memory keys/values).
+</p>
+
+<h3>Routes: Token Highways for Efficient Computation</h3>
+<p>
+The paper introduces routes - Which essentially serves as a unidirectional transport for the tokens across layers. formal defination of a route \(r\) in the network architecture is designed to enable flexible information pathways through skip connections, enhancing training efficiency and preserving critical details:
+<br>
+A route \(r\) is formally defined as:<br>
+<center>\( r = \{ (D_{li}^\theta, D_{lj}^\theta) \mid 0 \leq i \lt j \leq B \} \)</center>
+
+
+<ul>
+  <li>where \(B+1\) are the total layers in the network \(D^\theta\) indexed from 0 (input) to \(B\) (output).</li>
+  <li> Layer set: \( L = \{ D_{l1}^\theta, D_{l2}^\theta, \dots, D_{lB}^\theta \} \), representing the processing layers.</li>
+  <li>connection pairs: each pair denotes a direct pathway from layer \(l_{i}\) to layer \(l_{j}\), where \(i\) &lt; \(j\).</li>
+</ul>
+The architecture emplyes smaller skips maybe to improve gradient flow during backprop and to mitigate vanishing gradients.
+<br>
+</p>
+<p>
+<center><img src="./assets/tread.png" style="width:70%"></img></center>
+When the route \(r_{i,j}\) is active, the tokens are bypassed by all intermediate layers it spans. Once the route completes, these tokens become available again, allowing layer \( D_\theta^{l_{j}}\) to receive information from layer \( D_\theta^{l_{i}}\). An interesting point from the paper is they hypothesize that the semantic importance of the noise space plays a crucial role. By repeatedly supplying information about \(x_{t}\) to the network, the learning of the noise-image mapping becomes more efficient. hence the route \(r_{0,j}\) in the above figure.
+<br><br>
+With this each route \(r_{i,j}\) decreases the computational cost along its length, as tokens are not involved in any computation up to their reintroduction but also increases the memory footprint as you will have to store the tokens up till reintroduction.
+
+</p>
+<h3>Multiple Routes for further acceleration</h3>
+<p>
+Promoting exploration of multiple routes at once, ensuring that more segments of the network can access the noise-space information more regularly. But this is much more complex then using a single route ( Things are not always linear \(:(\) ). Now the complexity arrises as and when the first route \(r_{0,i}\) terminates, tokens are transferred from the input to layer \( D_\theta^{l_{i+1}}\), filling the set of tokens back up to its original size. With this an entirly new set of tokens are created, now the paper suggests on two objectives that should be considered while working with multiple routes :
+<ul>
+  <li>Introducing \(x_{t}\) via route \(r_{j,k}\) to layer \( D_\theta^{l_{k+1}}\),</li>
+  <li> Utilizing the already computed information from the layers between \(r_{0,i}\) and \(r_{j,k}\) to utilize the models capacity efficiently.</li>
+</ul>
+
+To address these objectives the paper prefers using a linear combination of \(x_{t}\) and the representation produced by the direct predecessor of \(r_{j,k}\). 
+
+</p>
+<h3>Leveraging Layer Similarities</h3>
+
+<img src="./assets/cossim-sana.png" style="width:100%"></img>
+<center><p style="font-size:12px">
+The above figure represents cosine similarities between Sana transformer blocks and SD3.5L Joint transformer blocks. <br>
+  </p></center>
+<p>
+I think observed pattern of cosine similarities between layers presents an opportunity for optimizing route selection in multi-route architectures. When two layers exhibit high cosine similarity (e.g., &gt; 0.8), their representations likely capture related features. This suggests that tokens passing through these layers might benefit from selective routing or skipping to avoid redundant transformations. layers with lower similarity scores might represent critical transformation points where full token processing is essential.
+\[
+    R(i, j) = \{ t \in T \mid s(i, j) &gt; \tau \land f(t, i) \approx f(t, j) \}
+    
+\]
+
+<ul>
+  <li>\(T\) is the token set</li>
+  <li>\(f(t,l)\) is the feature representation of token \(t\) at layer \(l\)</li>
+  <li>\(R(i,j)\) defines the set of tokens that can safely utilize the route from layer \(i\) to \(j\)</li>
+</ul>
+
+If someone with the curious mind wants to dive into the details there is an amazing blog from Abhinay at <a href="https://huggingface.co/blog/NagaSaiAbhinay/transformer-layers-as-painters-dit">HuggingFace Articles</a> or here's a short tweet from me on the same topic on <a href="https://x.com/Shauray7/status/1834330974647120232">X/Twitter</a>.
+
+</p>
+<h3>Multi-Route Ensemble Loss.</h3>
+<p>
+In the above sections we saw that withholding tokens increases task complexity. the added complexity can be managed by adjusting the loss functions, since traditional loss functions can only handle one mask at a time using multiple routes requirests handling multiple masks simultaneously. Each route \(r_{i,j}\) has it own mask operator \(m\), where \(V^k_{m}\) selects tokens for route based on random mask \(m\), \( \overline{V}^k_m \) is the complement operator (selects tokens NOT in the mask), there approch essentailly creates a more sophisticaed loss calculation system that can handle the complexity of having multiple information pathways.
+\[
+    L_{\text{dsm}}^k = \mathbb{E}_{x_0 \sim p_{\text{data}}, n \sim \mathcal{N}(0, t^2 I), m} \\ 
+    \| \overline{V}_m^k \left( D_\theta^{R^k} (x_0 + n, t) - x_0 \right) \|^2,
+\]
+
+\[
+    L_{\text{mae}}^k = \mathbb{E}_{x_0 \sim p_{\text{data}}, n \sim \mathcal{N}(0, t^2 I), m} \\ 
+    \| V_m^k \left( D_\theta^{R^k} (x_0 + n, t) - x_0 \right) \|^2
+\]
+
+with this, where \(D_\theta^{R^k}(·,·)\) represents the subnetwork of \(D_\theta(·,·)\) defined by the k-th route in \(R\). Our final multi-route ensemble loss is formulated as \(L\):
+\[
+    L = \frac{1}{N} \sum_{k=1}^N L_{\text{dsm}}^k + \lambda L_{\text{mae}}^k
+\]
+
+
+where \(N\) denotes the total number of sequential routes employed.
+
+</p>
+
+<h3>Conclusion: The Magic of Routes</h3>
+<img src="./assets/conc.png" style="width:100%"></img>
+<p>
+
+</p>
+<br>
+<hr>
+    </body>
+</html>
