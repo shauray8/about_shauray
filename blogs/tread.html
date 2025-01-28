@@ -60,21 +60,21 @@
 </style>
 
 <p>
-Diffusion models dominate visual generation, yet grapple with sample inefficiency and high training costs. Traditional diffusion transformers suffer from quadratic complexity, prompting research into token reduction through masking.TREAD <a href="https://arxiv.org/pdf/2501.04765">2501.04765</a> diverges by preserving token information through predefined routes that strategically reintroduce data in deeper model layers. By combining multiple routes and implementing an adaptive auxiliary loss, enhancing training efficiency without architectural modifications.
+Diffusion models have become the cornerstone of visual generation, yet they continue to face challenges like sample inefficiency and high training costs. While traditional diffusion transformers struggle with quadratic complexity, much of the research has focused on reducing tokens through techniques like masking. In contrast, TREAD <a href="https://arxiv.org/pdf/2501.04765">(2501.04765)</a> takes a different approach by retaining token information via predefined routing pathways that strategically reintroduce data at deeper layers of the model. This method leverages multiple routing paths while incorporating an adaptive auxiliary loss, significantly boosting training efficiency without requiring architectural changes.
 </p>
 
 <h3>Quadratic Complexity</h3>
 <p>
 Starting off with the main problem the paper addresses - when a system has quadratic complexity relative to input length, it means the computational cost (time/memory) scales with the square of the input size. For example:
 <ul>
-  <li>If the input length is N, the cost grows as O(N²).</li>
-  <li>Doubling the input length (2N) quadruples the computational cost (4N²).</li>
+  <li>If the input length is \(N\), the cost grows as \(O(N^{2})\).</li>
+  <li>Doubling the input length \((2N)\) quadruples the computational cost \((4N^{2})\).</li>
 </ul>
 
 If the architecture scales quadratically with input length, training becomes prohibitively expensive for large inputs (e.g., high-resolution images, long videos). For instance:
 <ul>
   <li>A 256×256 image split into 16×16 patches becomes 256 tokens.</li>
-    <li>A transformer would compute 256² = 65,536 interactions per layer.</li>
+    <li>A transformer would compute \(256^2\) = 65,536 interactions per layer.</li>
 </ul>
 
 One way of reducing such tokens is masking but the paper introduces avoiding token discarding:<br> 
@@ -185,9 +185,14 @@ where \(N\) denotes the total number of sequential routes employed.
 <h3>Conclusion: The Magic of Routes</h3>
 <img src="./assets/conc.png" style="width:100%"></img>
 <p>
+The paper mentions all the training strategies benchmarking on ImageNet-1K, which is a good PoC but they did not evaluate with the same setup, but hey it's legit lab though I feel there method has to be very sensitive to the hyperparameters, including masking rate and loss weighting, I would recomend going through there setup mentioned an the paper. Just mentioning the interesting things here starting off with FID score comparisons accross the paper. 
+<img src="./assets/table-tread.jpg" style="width:100%"></img>
 
+I don't really like how they mention DiT all over the paper and the Implementation details are for training EDM ! anyways on that they ensure that the first route starts at \(D_\theta^{l_{0}}\) to maximize the potential length of route \(r\) spans. Now comparing pruning/ masking and routing, where both the approches would remove tokens in one way or the other routing forces you to use all the tokens merely witholding them from some computational blocks.
+<img src="./assets/prun-tread.png" style="width:100%"></img>
+All in all an interesting read though still requires a full scale test should be exiting experimenting with SANA ;), here's there codebase <a href="https://github.com/CompVis/tread">CompVis/tread</a>. 
 </p>
-<br>
 <hr>
+<br>
     </body>
 </html>
