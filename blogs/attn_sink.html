@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Attention Sink</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="Attention Sinks">
+    <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Shauray Singh blog posts" />
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="main.css">
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-1DD05WB973"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-RLJ3MKG26H');
+    </script>
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+
+  <div class="wrap">
+
+    <a class="site-title" href="./blog.html">We Must Know, We Will Know</a>
+    
+</header>
+
+
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>Attention Sinks</h1>
+    <p class="meta">Sep 11, 2025</p>
+  </header>
+
+  <article class="post-content">
+  <style>
+.post-header h1 {
+    font-size: 35px;
+}
+.post pre,
+.post code {
+    background-color: #fcfcfc;
+    font-size: 13px; /* make code smaller for this post... */
+}
+</style>
+
+
+<center><img src="./assets/sink.png" style="width:80%"></img></center>
+
+<p>
+You’re staring at your attention map. Token 0 — the very first one — is glowing. Not because it’s important. Not because it’s the subject or the object or the scene. It’s glowing… because it does nothing. <br>
+
+Its value vector? Almost zero.<br>
+Its key? Tiny.<br>
+And yet, layer after layer, especially the deep ones — everyone keeps attending to it.<br>
+This makes no sense right? But it kinda does. It actually makes perfect sense.<br>
+</p>
+
+<h3>What transformers really need</h3>
+<p>
+Transformers are built on residuals. 
+\[
+  \mathbf{x}^{(l+1)} = \mathbf{x}^{(l)} + \mathcal{F}(\mathbf{x}^{(l)})
+\]
+
+where \(\mathcal{F}\) is typically → LayerNorm → MultiHeadAttention → LayerNorm → MLP. <br>
+For deep stability, long-sequence coherence, and representation preservation, the model must be able to learn:
+\[
+  \mathcal{F}(\mathbf{x}^{(l)}) \approx 0
+\]
+But Attention is not naturally identity-friendly
+\[
+  \text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{softmax}\left( \frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}} \right) \mathbf{V}
+\]
+it always produces a convex combination of value vectors — a weighted average, not a copy. Even if Q=K=V , attention redistributes information — it does not preserve. So Even if you want to output zero — you can’t just “turn off” attention. Softmax forces you to spread probability mass over all tokens. <br>
+And if you’re dumb enough to attend to a token with a big value? Congrats, you just ruined your perfect representation.<br>
+So how does a transformer learn to output ≈0 when needed? <b>Attention Sinks</b>!
+</p>
+
+<h3>The Model’s Solution: Invent a Token That Outputs Zero </h3>
+<p>
+So the model picks a token usually token 0 and trains it to have two properties:
+<br>
+Property 1: Value Vector ≈ 0
+\[
+  \|\mathbf{v}_0\|_2 \approx 0
+\]
+So when other tokens attend to it contribution to output is near zero.
+
+\[
+  A_{i0} \cdot \mathbf{v}_0 \approx 0
+\]
+
+Now Even if \(A_{i0} = 0.9\), if \(\mathbf{v}_0 \approx 0\) , you get almost no change. this lets the model approximate :
+
+\[
+  \text{Attention}(x)_i ≈ 0 → output ≈ x_i → identity
+\]
+
+But you can’t have everyone attending to token 0 all the time. That would break everything. 
+<br>
+Property 2:
+the model trains \(k_{0}\) to be :
+<ul>
+  <li> Low norm: \(\|k_0\|_2\)  is small → harder to get high attention scores accidentally</li>
+  <li>Orthogonal or negatively correlated with other keys so normal queries (attending to content) get low or negative dot products</li>
+</ul>
+
+Which means only queries that deliberately rotate to align with \(k_{0}\) will attend to it. Everyone else? Their attention to token 0 stays near zero. This creates a gated channel for identity behavior.
+
+<br><br>
+
+To prevent accidental attention to the sink, the model learns:
+
+\[
+  k_s^\top k_j \approx 0 \quad \forall j \neq s
+\]
+where \( \|k_s\| is \text{ small} \) why? Consider the attention score (if vectors are row, this might create confusion towards the end so from now on vectors are treated as columns similar to how pytorch does it): 
+
+\[
+  s_{ij} = q_i^\top k_j / \sqrt{d}
+\]
+
+If \(k_s\) is orthogonal to all other \(k_j\), then \(q_i\) must be explicitly aligned with \(k_s\) to produce high \(s_{is}\) and random or content-directed \(q_i\) will have \(s_{is} \approx 0\) which when combined with small \(\|k_s\|\), this ensures low baseline attention to sink and high only when intentionally triggered. So basically :
+
+<ul>
+  <li> \(q_i\) aligns with \(k_s\) → attend to sink → output ≈ 0 → identity.</li>
+  <li> \(q_i\) aligns with content keys → attend to content → update.</li>
+</ul>
+
+
+</p>
+<h3>Observations in Experiments</h3>
+<center><img src="./assets/graph.webp" style="width:100%"></img>
+  <p style="font-size:12px">This very plot comes from <a>https://arxiv.org/pdf/2410.10782</a></p> </center>
+<p>
+Value Norm Plot (First row, third column in above figures)
+  <ul>
+    <li> X-axis: token index </li>
+    <li> Y-axis: L2 norm of value vector \(\|\mathbf{v}_j\|_2\) </li>
+    <li> Observation: token 0 is near zero. Others are larger. which confirms: attending to token 0 ≈ no change. </li>
+  </ul>
+
+Key Norm Plot (First row, second column)
+  <ul>
+    <li> Y-axis: \(\|\mathbf{k}_j\|_2\) </li>
+    <li> Observation: token 0’s key norm is small. </li>
+    <li> Confirms: only strong, deliberate alignment can trigger attention. </li>
+  </ul>
+
+Cosine Similarity Plot (Second row, second column)
+  <ul>
+    <li> Y-axis: cos\( ( \mathbf{k}_0, \mathbf{k}_j) \) for \( j \ne 0 \) </li>
+    <li> Observation: values near 0 or negative. </li>
+    <li> Confirms: sink key lives in isolated subspace — no interference.</li>
+  </ul>
+
+Layer-wise Attention to Token 0
+  <ul>
+    <li> X-axis: layer index </li>
+    <li> Y-axis: mean attention weight to token 0</li>
+    <li> Observation: increases in deeper layers. which confirms: used for stabilization after representations saturate.</li>
+  </ul>
+
+  So to sum all of this up to prevent the sink from interfering with normal attention, the model pushes the sink’s key vector \(\mathbf{k}_0\) into a nearly orthogonal subspace relative to all other keys.
+  <br><br>
+The plots are for LLaMA3-8B, in the next blog (hopefully soon) I'll explore sliding window on video models specially WAN2.2 while taking attn sinks in account.
+<br>
+
+</p>
+<h3>Why This Gets Worse in Long Sequences — Attention Dilution</h3>
+<p>
+
+Let's understand the models attention entropy, let's define the attention distribution over tokens for query \(i\) - \( p_i(j) = \alpha_{ij} \) the entropy of this distribution is :
+
+\[
+  H(p_i) = -\sum_j p_i(j) \log p_i(j)
+\]
+
+In long sequences (wher \(N\) is large), if attention is uniformly diffused \(H(p_i) \approx \log N\) which means High entropy → attention spread thin → no token receives strong focus. This is what attention dilation is pretty much.
+<br><br>
+Now if we recall, to approximate identity the model needs \(\alpha_{is} \approx 1\) (think of the softmax formula when you read this).
+
+\[
+\alpha_{is} = \frac{\exp(q_i k_s^\top / \sqrt{d})}{\sum_{m=1}^N \exp(q_i k_m^\top / \sqrt{d})}
+\]
+ But in long sequences, the softmax denominator grows denoted by \(Z_i\). Here as \(N\) increases, \(Z_i\) increases → all \( \alpha_{ij}\) shrink unless \(q_i k_j^\top\) is very large.
+\[
+  Z_i = \sum_{m=1}^N \exp(q_i k_m^\top / \sqrt{d})
+\]
+
+So to make \( \alpha_{is} \approx 1 \), the model must make:
+\[
+  q_i k_s^\top \gg q_i k_j^\top \quad \forall j \neq s
+\]
+But if \(k_s\) is low-norm and orthogonal, this requires \(q_i\) to be extremely aligned — which is expensive and unstable. So what happens ?
+<ul>
+  <li>The model amplifies sink attention even more to compensate for dilution.</li>
+  <li>Sink weights become more extreme in long sequences.</li>
+  <li>Token 0 receives disproportionately higher attention as \(N\) grows.</li>
+</ul>
+I'd call this desperation, The model is fighting softmax dilution by forcing a spike in attention to the only token that can give it zero output. Empirical observation from above: In 32K-context LLMs, first 4 tokens receive 40%+ of total attention mass in deep layers.Not because they’re important but at this point the model is screaming for stability.
+
+
+
+
+</p>
+
+<h3>Sink Amplification</h3>
+<p>
+Assume \(k_s\) is orthogonal to all other keys: \(k_s^\top k_j = 0\), \(\|k_s\| = \epsilon\) is small, all other \( k_j\) live in a subspace orthogonal to \(k_s\), with \(\|k_j\| \approx 1\) and \(q_i\) is a unit vector for simplicity <a href="https://en.wikipedia.org/wiki/Orthogonal_matrix">(refer this)</a> then:
+
+\[
+  q_i k_s^\top = \epsilon \cos \theta_s  
+\]
+\[
+  q_i k_j^\top = \cos \theta_j \quad \text{(for j ≠ s)}
+\]
+
+Softmax attention sink:
+\[
+\alpha_{is} = \frac{\exp(\epsilon \cos \theta_s / \sqrt{d})}{\exp(\epsilon \cos \theta_s / \sqrt{d}) + \sum_{j \neq s} \exp(\cos \theta_j / \sqrt{d})}
+\]
+As \(N\) grows, the denominator’s sum grows → \(\alpha_{is}\) shrinks. To keep \(\alpha_{is} \approx 1\), the model must make \(\cos \theta_s \approx 1 → q_i\) fully aligned with \(k_s\) and make \( \cos \theta_j \approx -1\) or 0 for all other \(j\) → suppress all other keys. This is computationally expensive and geometrically fragile. Instead the model takes and easy way out : 
+<ul>
+  <li> In early layers: spread attention, build features.</li>
+  <li>In deep layers: collapse attention to sink → force identity → survive dilution.</li>
+</ul>
+Which is why sink attention intensifies with depth and sequence length.
+</p>
+
+<h3>Dimentional Waste and Capacity Loss</h3>
+<p>
+The sink burns two representation slots One key dimension: forced into orthogonal subspace → can’t encode content and one value dimension: forced toward zero → can’t contribute signal. In a model with d_model = 1024, and N = 32,768 tokens, you’re wasting:
+<ul>
+  <li>1024 key dimensions</li>
+  <li>1024 value dimensions</li>
+</ul>
+
+Just to implement a control flow mechanism that should be free. Which is where Gating comes or probably better alternative would be this <a>https://arxiv.org/pdf/2504.20966</a> Haven't read it so wont talk about it!
+</p>
+
+<h3>Gating at output</h3>
+<p>
+I would highly recomend reading this <a href="https://quilted-agreement-28c.notion.site/Why-Does-Attention-Sink-Occur-21568e7f8199809586b8e05cc97b90a9?pvs=97#21568e7f8199807f94dad49615b56e8c">little piece on gating</a> and if you are still here this is my take on it.
+<br><br>
+introduce scalar gate \(g_i \in [0,1]\) per token:
+\[
+x_{l+1} = x_l + g_i \cdot \text{Attn}(x_l)_i
+\]
+Now if \(g_i = 0\) → \(output = x_l\) → identity, if \(g_i = 1\) → full attention update and If \(g_i = 0.3\) → partial update.
+<br>
+No need for \(v_s\) ≈ 0. No need for orthogonal \(k_s\). No attention dilution problem. The model learns \(g_i\) via a tiny MLP:
+\[
+g_i = \sigma(W_g x_l[i] + b_g)
+\]
+which costs 1024 * 1 parameters per layer → negligible. Qwen’s experiments confirm: only G1 gating kills the sink because only G1 can explicitly nullify attention output. All other gating positions (after MLP, etc.) can’t force \(F_l(x) = 0\) since the   attention already fired.
+
+
+</p>
+
+<h3>To Conclude</h3>
+<p>
+<ul>
+  <li>Transformers require context-aware identity for residual stability</li>
+  <li>Softmax attention cannot output zero due to convex combination constraint.</li>
+  <li>Model approximates zero in order to learn token with \(v_s\) ≈ 0.</li>
+  <li>Isolates /(k_s/) → orthogonal, low-norm means clean switching.</li>
+  <li>In long sequences, attention dilutes in turn model amplifies sink to compensate.</li>
+  <li>This wastes dimensions and destabilizes training.</li>
+  <li>Gating at attention output (G1) allows explicit zeroing which eliminates sink.</li>
+</ul>
+That pretty much sums up the blog I guess. And to clarify attention sinks are not memory they're NOPs. <br><br>
+Now since the whole point of this blog was to explore Attention Sinks in Video Diffusion models (in the next part), here's some experiments I'm currently doing with WAN2.2 in order to account for attn sinks.
+</p>
+<h3>Attention Sinks and Video Diffusion Models</h3>
+
+My assumption is to see a couple of patches at the start to show the sink behaviours since <a href="https://x.com/zmkzmkz/status/1917547447502659883">"Any sufficiently trained transformer that uses softmax will exhibit attention sink."</a> now in order to generate huge videos everyone uses sliding window attention and let's be real, you're not retraining WAN from scratch nor adding gates. The sink is inevitable might as well make it useful.
+<ul>
+  <li>What if you designed your sliding window to respect the sink and not ignore it?</li>
+  <li>What if every local window always includes token 0 or patch 0 or whatever?</li>
+  <li>What if the sink became your anchor point for temporal coherence, while sliding attention handles motion, texture, lighting?</li>
+</ul>
+until then here's some resources and references to go over:
+<ul>
+  <li><a>https://quilted-agreement-28c.notion.site/Why-Does-Attention-Sink-Occur-21568e7f8199809586b8e05cc97b90a9#21568e7f81998007a2c7ece3c02c5730</a></li>
+  <li><a>https://x.com/zmkzmkz/status/1917547438258450674</a></li>
+  <li><a>https://www.youtube.com/watch?v=PKYvAc9UZhk</a></li>
+  <li><a>https://github.com/sail-sg/Attention-Sink</a></li>
+  </ul>
+</p>
+<hr>
+    </body>
+</html>
