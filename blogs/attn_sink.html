@@ -280,7 +280,7 @@ which costs 1024 * 1 parameters per layer → negligible. Qwen’s experiments c
   <li>Transformers require context-aware identity for residual stability</li>
   <li>Softmax attention cannot output zero due to convex combination constraint.</li>
   <li>Model approximates zero in order to learn token with \(v_s\) ≈ 0.</li>
-  <li>Isolates /(k_s/) → orthogonal, low-norm means clean switching.</li>
+  <li>Isolates \(k_s\) → orthogonal, low-norm means clean switching.</li>
   <li>In long sequences, attention dilutes in turn model amplifies sink to compensate.</li>
   <li>This wastes dimensions and destabilizes training.</li>
   <li>Gating at attention output (G1) allows explicit zeroing which eliminates sink.</li>
