@@ -63,11 +63,11 @@
 <center><img src="./assets/elon_sink.png" style="width:80%"></img></center>
 
 <p>
-You’re staring at your attention map. Token 0 — the very first one — is glowing. Not because it’s important. Not because it’s the subject or the object or the scene. It’s glowing… because it does nothing. <br>
+You’re staring at your attention map. Token 0, the very first one is glowing. Not because it’s important. Not because it’s the subject or the object or the scene. It’s glowing… because it does nothing. <br>
 
 Its value vector? Almost zero.<br>
 Its key? Tiny.<br>
-And yet, layer after layer, especially the deep ones — everyone keeps attending to it.<br>
+And yet, layer after layer, especially the deep ones everyone keeps attending to it.<br>
 This makes no sense right? But it kinda does. It actually makes perfect sense.<br>
 </p>
 
@@ -87,7 +87,7 @@ But Attention is not naturally identity-friendly
 \[
   \text{Attention}(\mathbf{Q}, \mathbf{K}, \mathbf{V}) = \text{softmax}\left( \frac{\mathbf{Q}\mathbf{K}^\top}{\sqrt{d_k}} \right) \mathbf{V}
 \]
-it always produces a convex combination of value vectors — a weighted average, not a copy. Even if Q=K=V , attention redistributes information — it does not preserve. So Even if you want to output zero — you can’t just “turn off” attention. Softmax forces you to spread probability mass over all tokens. <br>
+it always produces a convex combination of value vectors a weighted average, not a copy. Even if Q=K=V , attention redistributes information it does not preserve. So Even if you want to output zero you can’t just “turn off” attention. Softmax forces you to spread probability mass over all tokens. <br>
 And if you’re dumb enough to attend to a token with a big value? Congrats, you just ruined your perfect representation.<br>
 So how does a transformer learn to output ≈0 when needed? <b>Attention Sinks</b>!
 </p>
@@ -208,7 +208,7 @@ So to make \( \alpha_{is} \approx 1 \), the model must make:
 \[
   q_i k_s^\top \gg q_i k_j^\top \quad \forall j \neq s
 \]
-But if \(k_s\) is low-norm and orthogonal, this requires \(q_i\) to be extremely aligned — which is expensive and unstable. So what happens ?
+But if \(k_s\) is low-norm and orthogonal, this requires \(q_i\) to be extremely aligned, which is expensive and unstable. So what happens ?
 <ul>
   <li>The model amplifies sink attention even more to compensate for dilution.</li>
   <li>Sink weights become more extreme in long sequences.</li>
