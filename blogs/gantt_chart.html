@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <title>FlashAttention4 Pipeline Gantt</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { 
+      background: #0b0b0f; 
+      color: #e8e6f3; 
+      font-family: 'Inter', Arial, sans-serif; 
+      margin: 0;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 10px;
+    }
+    h1 { 
+      color: #f3e8ff; 
+      font-size: 28px; 
+      margin: 18px 0 10px 0;
+      text-align: center;
+      font-weight: 600;
+    }
+    .note { 
+      max-width: 1100px; 
+      margin: 15px auto; 
+      color: #cfc9e8; 
+      font-size: 14px; 
+      background: rgba(40, 30, 60, 0.3);
+      padding: 15px;
+      border-radius: 8px;
+      border-left: 3px solid #805ad5;
+    }
+    .small { 
+      font-size: 12px; 
+      color: #aaa6c9; 
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(100, 80, 140, 0.3);
+    }
+    #chart { 
+      width: 100%; 
+      height: 780px; 
+      margin: 20px auto; 
+      background: rgba(15, 15, 25, 0.7);
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin: 15px 0;
+      flex-wrap: wrap;
+    }
+    .control-btn {
+      background: #4a3a7a;
+      color: #e0d8ff;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.3s ease;
+    }
+    .control-btn:hover {
+      background: #5a4a8a;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    .legend-container {
+      background: rgba(20, 15, 35, 0.7);
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px auto;
+      max-width: 1100px;
+    }
+    .legend-title {
+      color: #d6bcfa;
+      font-weight: 600;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    .legend-items {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+    }
+    .instructions {
+      background: rgba(40, 30, 60, 0.3);
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px auto;
+      max-width: 1100px;
+      font-size: 14px;
+    }
+    .instructions h3 {
+      color: #d6bcfa;
+      margin-top: 0;
+    }
+    .instructions ul {
+      padding-left: 20px;
+    }
+    .instructions li {
+      margin-bottom: 8px;
+    }
+    @media (max-width: 768px) {
+      h1 { font-size: 24px; }
+      #chart { height: 600px; }
+      .note { font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>FlashAttention4 Forward</h1>
+    
+    <div class="note">
+      <div style="margin-bottom:6px"><strong>sequence=256, head_dim=64, tile=64</strong> → 4 tiles. This chart models a single CTA and one head. cp.async loads overlap with tensor-core MMA, TMEM stores/loads overlap with compute, and epilogues run concurrently using cp.async bulk commits. Hover for exact op and tile.</div>
+      <div class="small">Colors: purples for compute/memory, orange for synchronization.</div>
+    </div>
+    
+    <div class="controls">
+      <button class="control-btn" onclick="Plotly.relayout('chart', {xaxis: {range: [0, 4.5]}})">Reset View</button>
+      <button class="control-btn" onclick="Plotly.relayout('chart', {yaxis: {autorange: true}})">Reset Y-Axis</button>
+      <button class="control-btn" onclick="toggleLegend()">Toggle Legend</button>
+    </div>
+    
+    <div id="chart"></div>
+    
+    </div>
+    
+  </div>
+
+<script>
+const tiles = 4;
+
+const dur = {
+  tma_load: 0.9,     // cp.async GMEM->SMEM tile
+  mma_qk: 0.8,       // tensor core Q*K^T
+  tmem_store_s: 0.08,
+  tmem_load_s: 0.12,
+  soft_rowmax: 0.1,
+  soft_exp: 0.22,
+  tmem_store_p: 0.08,
+  mma_pv: 0.6,
+  corr_load_o: 0.1,
+  corr_rescale: 0.15,
+  corr_store_o: 0.08,
+  epilogue_store: 0.9,
+  small_gap: 0.02,
+  mbarrier_latency: 0.01
+};
+
+const load_interval = dur.tma_load * 0.5;
+
+let tasks = [];
+let vlines = []; // vertical sync markers
+
+for (let i=0; i<tiles; ++i){
+  const q_start = i * load_interval;
+  const q_end = q_start + dur.tma_load;
+  const k_start = q_start + 0.08; // small offset
+  const k_end = k_start + dur.tma_load;
+  const v_start = k_start + 0.06;
+  const v_end = v_start + dur.tma_load;
+
+  const mma_qk_start = Math.max(q_end, k_end) + dur.small_gap;
+  const mma_qk_end = mma_qk_start + dur.mma_qk;
+
+  const s_store_start = mma_qk_end + dur.small_gap;
+  const s_store_end = s_store_start + dur.tmem_store_s;
+
+  const soft_load_start = s_store_end + dur.small_gap;
+  const soft_load_end = soft_load_start + dur.tmem_load_s;
+  const soft_rowmax_end = soft_load_end + dur.soft_rowmax;
+  const soft_exp_end = soft_rowmax_end + dur.soft_exp;
+  const p_store_end = soft_exp_end + dur.tmem_store_p;
+
+  const mma_pv_start = Math.max(v_end, soft_exp_end - 0.08, mma_qk_end + 0.02);
+  const mma_pv_end = mma_pv_start + dur.mma_pv;
+
+  const corr_load_start = p_store_end + dur.small_gap;
+  const corr_load_end = corr_load_start + dur.corr_load_o;
+  const corr_rescale_end = corr_load_end + dur.corr_rescale;
+  const corr_store_end = corr_rescale_end + dur.corr_store_o;
+
+  const epi_start = corr_store_end + dur.small_gap;
+  const epi_end = epi_start + dur.epilogue_store;
+
+  tasks.push({role:'Load Warp', start:q_start, end:q_end, desc:`cp.async Q (tile ${i})`} );
+  tasks.push({role:'Load Warp', start:k_start, end:k_end, desc:`cp.async K (tile ${i})`} );
+  tasks.push({role:'Load Warp', start:v_start, end:v_end, desc:`cp.async V (tile ${i})`} );
+
+  tasks.push({role:'MMA Warp', start:mma_qk_start, end:mma_qk_end, desc:`tcgen05.mma Q*K^T -> S (tile ${i})`} );
+  tasks.push({role:'MMA Warp', start:mma_pv_start, end:mma_pv_end, desc:`tcgen05.mma P*V -> O_partial (tile ${i})`} );
+
+  tasks.push({role:'TMEM', start:s_store_start, end:s_store_end, desc:`tcgen05.StS store S->TMEM (tile ${i})`} );
+  tasks.push({role:'Softmax Warps', start:soft_load_start, end:soft_load_end, desc:`tcgen05.LdS load S from TMEM (tile ${i})`} );
+  tasks.push({role:'Softmax Warps', start:soft_load_end, end:soft_rowmax_end, desc:`rowmax reduce (tile ${i})`} );
+  tasks.push({role:'Softmax Warps', start:soft_rowmax_end, end:soft_exp_end, desc:`exp2 + normalize (tile ${i})`} );
+  tasks.push({role:'TMEM', start:soft_exp_end, end:p_store_end, desc:`tcgen05.StP store P->TMEM (tile ${i})`} );
+
+  tasks.push({role:'Correction Warps', start:corr_load_start, end:corr_load_end, desc:`tcgen05.LdO load O_partial (tile ${i})`} );
+  tasks.push({role:'Correction Warps', start:corr_load_end, end:corr_rescale_end, desc:`rescale O (tile ${i})`} );
+  tasks.push({role:'Correction Warps', start:corr_rescale_end, end:corr_store_end, desc:`tcgen05.StO store O_corrected (tile ${i})`} );
+
+  tasks.push({role:'Epilogue Warp', start:epi_start, end:epi_end, desc:`cp.async.bulk.commit_group O->GMEM (tile ${i})`} );
+
+  const s_bar_time = s_store_end + dur.mbarrier_latency;
+  const p_bar_time = p_store_end + dur.mbarrier_latency;
+  const o_bar_time = corr_store_end + dur.mbarrier_latency;
+  vlines.push({x:s_bar_time, text:`S_ready t${i}`});
+  vlines.push({x:p_bar_time, text:`P_ready t${i}`});
+  vlines.push({x:o_bar_time, text:`O_ready t${i}`});
+}
+
+const roles = ['Load Warp','MMA Warp','TMEM','Softmax Warps','Correction Warps','Epilogue Warp'];
+const palette = {
+  'Load Warp':'#b794f4',
+  'MMA Warp':'#805ad5',
+  'TMEM':'#6b46c1',
+  'Softmax Warps':'#9f7aea',
+  'Correction Warps':'#d6bcfa',
+  'Epilogue Warp':'#7c3aed'
+};
+
+const traces = [];
+roles.forEach(role => {
+  const t = tasks.filter(x => x.role === role).map(x => ({
+    start: x.start, 
+    end: x.end, 
+    desc: x.desc
+  }));
+  if (t.length === 0) return;
+  
+  traces.push({
+    type:'bar',
+    x: t.map(e => e.end - e.start),
+    y: t.map(_ => role),
+    base: t.map(e => e.start),
+    text: t.map(e => e.desc),
+    orientation:'h',
+    marker: {color: palette[role], line:{color:'#1a0a2b', width:1.5}},
+    hoverinfo:'text',
+    name: role,
+    opacity:0.9
+  });
+});
+
+const shapes = vlines.map(v => ({
+  type:'line', 
+  x0:v.x, 
+  x1:v.x, 
+  y0:-0.5, 
+  y1:roles.length-0.5,
+  line:{color:'#ffb86b', width:2, dash:'dot'},
+  opacity:0.8
+}));
+
+const annos = vlines.map((v,i) => ({
+  x:v.x, 
+  y:roles.length-0.5, 
+  xref:'x', 
+  yref:'y', 
+  text:v.text, 
+  showarrow:false, 
+  font:{color:'#ffdfba', size:11}, 
+  yshift: (i%2===0? -18 : -34),
+  bgcolor: 'rgba(100, 80, 140, 0.7)',
+  bordercolor: '#805ad5',
+  borderwidth: 1,
+  borderpad: 3
+}));
+
+const layout = {
+  barmode:'overlay',
+  paper_bgcolor:'#0b0b0f',
+  plot_bgcolor:'#0b0b0f',
+  font:{color:'#f6f3ff', size:14},
+  title:{
+    text:'FlashAttention4 Forward',
+    font:{size:20, color:'#f3e8ff'},
+    x: 0.5,
+    xanchor: 'center'
+  },
+  xaxis:{
+    title:'Relative Time (units)', 
+    gridcolor:'#2a224a', 
+    zeroline:false,
+    showgrid: true,
+    gridwidth: 1,
+    gridcolor: 'rgba(100, 80, 140, 0.2)',
+    tickfont: {size: 12}
+  },
+  yaxis:{
+    title:'Warp / Role', 
+    automargin:true, 
+    categoryorder:'array', 
+    categoryarray:roles,
+    tickfont: {size: 13}
+  },
+  height:780,
+  margin:{l:200, r:60, t:90, b:80},
+  shapes:shapes,
+  annotations:annos,
+  legend:{
+    orientation:'h', 
+    y:-0.15, 
+    font:{size:12},
+    bgcolor: 'rgba(30, 20, 50, 0.7)',
+    bordercolor: '#5a4a8a',
+    borderwidth: 1
+  },
+  hovermode: 'closest',
+  hoverlabel: {
+    bgcolor: '#2a1a4a',
+    bordercolor: '#805ad5',
+    font: {color: '#f6f3ff', size: 13}
+  }
+};
+
+Plotly.newPlot('chart', traces, layout, {
+  responsive: true,
+  displayModeBar: true,
+  modeBarButtonsToAdd: ['pan2d', 'select2d'],
+  modeBarButtonsToRemove: ['lasso2d', 'resetScale2d'],
+  displaylogo: false
+});
+
+let legendVisible = true;
+function toggleLegend() {
+  legendVisible = !legendVisible;
+  Plotly.relayout('chart', {'showlegend': legendVisible});
+}
+</script>
+</body>
+</html>
