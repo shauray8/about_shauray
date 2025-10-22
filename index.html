@@ -1,272 +1,599 @@
-
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Shauray Singh</title>
-    <link rel="stylesheet" type="text/css" href="another_style.css">
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-BDHYXX112J"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>shauray singh</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-      gtag('config', 'G-BDHYXX112J');
-    </script>
-  </head>
-  <body>
+        :root {
+            --bg: #fff;
+            --text: #000;
+            --link: #0000ee;
+            --link-visited: #551a8b;
+            --border: #000;
+            --quote-bg: #f5f5f5;
+            --card-bg: #fafafa;
+        }
 
-    <div id="dhead" class="container">
-      <div class="row">
-        <div id="dpic">
-          <img src="assets/th.webp" class="ppic" />
-        </div>
-        <div id="ddesc">
-          <h1>Shauray Singh</h1>
-          <h2>Computers can see, hear and learn. Welcome to the future !</h2>
-          <div id="dico">
-            <a href="https://twitter.com/shauray7"><img src="assets/twitter.svg" class="iico" /></a>
-            <a href="https://github.com/shauray8"><img src="assets/github.svg" class="iico"/></a>
-            <a href="https://shauray8.github.io/about_shauray/blogs/blog.html"><img src="assets/search.svg" class="iico" /></a>
-          </div>
-          <div id="demail"></div>
-        </div>
-      </div>
-    </div>
+        [data-theme="dark"] {
+            --bg: #000;
+            --text: #c9d1d9;
+            --link: #58a6ff;
+            --link-visited: #8e96f0;
+            --border: #333;
+            --quote-bg: #0d1117;
+            --card-bg: #0d1117;
+        }
 
-    <hr>
-    <center>
-      <p style="width : 72%; opacity:.7">An idiot admires complexity. A genius admires simplicity. A physicist tries to make it simple. Anything that is gaining complexity, more the idiot will admire it. If you make something more clusterfuck that he can't understand, he will think you are a god because you made it so complicated nobody can understand it. That's how they write academic journals to make others think you are a genius.<br> <b>Terry Davis</b> <br><br> BUT if you want to be an Idiot <a href="some_other_index.html">here's</a> a more clusterFUCK version of this website ! <br><b> Maybe that's the reason most of us don't believe that we live in a simulation.</b></p> 
+        body {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 20px;
+            background: var(--bg);
+            color: var(--text);
+            transition: background 0.2s, color 0.2s;
+        }
 
+        a {
+            color: var(--link);
+            text-decoration: none;
+            border-bottom: 1px dotted var(--link);
+        }
 
-    </center>
-    <hr>
-    <br><br>
+        a:hover {
+            background: var(--link);
+            color: var(--bg);
+            border-bottom: 1px solid var(--link);
+        }
 
-    <div id="history" class="container">
+        nav {
+            margin-bottom: 30px;
+            padding: 10px 0;
+            border-bottom: 2px solid var(--border);
+            border-top: 2px solid var(--border);
+        }
 
-      <div class="entry row">
-        <div class="timespan">
-          12/2023 - present
-        </div>
-        <div class="ico">
-          <div class="entry-dot"></div>
-          <img src="assets/sdapi.png" style="max-width: 64px;margin-left:20px"/>
-        </div>
-        <div class="desc">
-          ML guy at ModelsLab (Prev StableDiffusionAPI), My daily grind involves keeping the
-        <a
-          href='https://github.com/ModelsLab/diffusers_plus_plus'>diffusers_plus_plus</a>
-        library in top shape, ensuring those diffusers and transformers are
-        faster than a speeding bullet (or at least, faster than they were
-        yesterday). And when I'm not busy patching and optimizing, I'm digging
-        through research papers to find the latest and greatest SOTA models to
-        add to our library and play with a lot of sweet compute
-        <h4>Technical Details:</h4>
+        nav a {
+            margin-right: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            border: none;
+        }
 
-        <li>I'm all about PyTorch, so if you're familiar with
-          those ecosystems, we're off to a great start.</li>
-        <li>I've got a love-hate relationship with CUDA and Triton - love the
-          performance, hate the debugging headaches - maybe not the torch
-          profiler</li>
-        <li>I'm always on the lookout for ways to parallelize model inference, so if you've
-          got experience with parallel processing, let's chat.</li><br>
+        nav a.active {
+            background: var(--text);
+            color: var(--bg);
+            padding: 2px 6px;
+        }
 
+        .theme-toggle {
+            float: right;
+            cursor: pointer;
+            background: var(--text);
+            border: none;
+            color: var(--bg);
+            padding: 2px 10px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
 
-          All state of the art, research / model inferences on <a href="https://twitter.com/shauray7"> twitter </a><br><br>
-        </div>
-      </div>
-      <div class="entry row">
-        <div class="timespan">
-          01/2023 - 04/2023
-        </div>
-        <div class="ico">
-          <div class="entry-dot"></div>
-          <img src="assets/zummit.jpg" style="max-width: 64px;"/>
-        </div>
-        <div class="desc">
-          I was a Senior Staff at Zummit InfoLabs, where I gave some talks and took some sessions on GIT/GitHub and how version control works with a brief introduction to CI/CD environments. <br><br>
-          Helped design companies' ML pipelines for better and faster deployment and improved access times. <br><br>
-          Reviewed some pull requests and helped solve some code-related issues in some major projects. <br><br>
+        h1 {
+            font-size: 28px;
+            margin: 25px 0 5px 0;
+            font-weight: normal;
+        }
 
-        </div>
-      </div>
+        h2 {
+            font-size: 18px;
+            margin: 30px 0 15px 0;
+            font-weight: bold;
+            text-transform: lowercase;
+        }
 
-      <div class="entry row">
-        <div class="timespan">
-          10/2022 - 1/2023
-        </div>
-        <div class="ico">
-          <div class="entry-dot"></div>
-          <img src="assets/zummit.jpg" style="max-width: 64px;"/>
-        </div>
-        <div class="desc">
-          I joined Zummit InfoLabs as a Jr. Data Scientist where I led a team of 5 interns and made some significant advancements in Taxi Demand Predictions which used some statistical methods and was then migrated to work with graph neural networks. <br><br>
-          Learned a lot about graph neural networks and how spatial-temporal graphs can make things faster and easier than some other traditional methods. <br><br>
-        </div>
-      </div>
+        .tagline {
+            font-size: 14px;
+            margin-bottom: 15px;
+            font-style: italic;
+        }
 
-      <div class="entry row">
-        <div class="timespan">
-          8/2020 - 6/2024
-        </div>
-        <div class="ico">
-          <div class="entry-dot"></div>
-          <img src="assets/manipal.jpg" style="max-width: 60px;margin-left:20px"/>
-        </div>
-        <div class="desc">
-          B.Tech at Manipal University Jaipur with a major in Data Science and a minor in Finance. This is where I got really deep into deep learning by browsing the internet and attending random lectures on youtube in my dorm room.
-        </div>
-      </div>
-    </div>
-    <br><hr>
-    <div class="container">
-      <div class="ctitle">HuggingFace</div>
-      <div>
-        I have a deep deep love for OpenSource, It's like lifeblood of the tech world, and I'm all in! I'm a regular contributor over at Hugging Face, rolling up my sleeves and getting things done. From Transformers to tokenizers, I'm in the trenches, making things better. <br>
-        Sharing some of the wisdom here with Blogs and some low quality tweets! <br><br>
-        So, remember, open source is where it's at.
-        <ul class="tul">
-          <li class="til tilb"><a href="https://huggingface.co/shauray">My HuggingFace Profile</a></li>
-          <li class="til tilb"><a href="https://twitter.com/Shauray7">Tweets/Anouncements</a></li>
-          <li class="til"><a href="">Blogs and Explainers</a></li>
-        </ul>
-      </div>
-    </div>
+        .quote-box {
+            background: var(--quote-bg);
+            border-left: 3px solid var(--text);
+            padding: 15px;
+            margin: 25px 0;
+            font-size: 12px;
+        }
 
-    <div class="container">
-      <div class="ctitle">YouTube</div>
-      <div>
-        In 2022 I started streaming on YouTube just some random coding shit and programmed some useless projects live. I like keeping things raw just like this website so every video on YouTube has some kind of copyright and is stupidly insane to watch them all but it shows my raw nature when I code.
-        <ul class="tul">
-          <li class="til tilb"><a href="https://www.youtube.com/channel/UCta5UaVURDef01M9YXpQnEg">My YouTube Channel</a></li>
-          <li class="til tilb"><a href="https://www.youtube.com/live/NW03HSdFyWk?feature=share">Live Bits</a></li>
-          <li class="til"><a href="https://www.youtube.com/@shauray2629/playlists">Computer Related Stuff on YouTube</a></li>
-        </ul>
-      </div>
-    </div>
-    <div class="container">
-      <div class="ctitle">Larynx Research</div>
-      <div>
-        At Larynx we develop state of the art deep learning architectures through which we can convert text to speech without hearing any of that computer generated sound bulshit ! Our first major project include converting any pdf text book to it's audiobook format. You can then use if for listning to financial reports of some company, some student can use it to learn some kinda useful shit and most importantly it's open source so you don't have to pay a single dime in order to learn !! FUCK AMAZON AUDIBLE !! <br><br> <center><a href = "https://github.com/Larynx-Research">Go Contribute</a> </center>
+        .quote-box p {
+            margin: 8px 0;
+        }
 
-      </div>
-    </div>
+        .author {
+            text-align: right;
+            font-weight: bold;
+            margin-top: 10px;
+        }
 
+        .warning {
+            text-align: center;
+            margin: 15px 0;
+            font-weight: bold;
+        }
 
-    <div style="background-color: #eee; padding-top: 1px; margin-top: 50px; padding-bottom: 30px;">
-    <div class="container">
-      <div class="ctitle">My Poorly Written Blog</div>
-      Refer <b>Twitter</b> for microblogs, refer <b><a href='./blogs/blog.html'>THIS</a></b> for full length blogs only if you have a good attention span ! Contains a lot of STEM stuff  
-      <!--
-      <ul class="nodot">
-      <li>
-      </li>
-        <li>Mar 2021 <a href="https://karpathy.github.io/2021/06/21/blockchain/">A from-scratch tour of Bitcoin in Python</a></li>
-        <li>Mar 2021 <a href="https://karpathy.github.io/2021/03/27/forward-pass/">Short Story on AI: Forward Pass</a></li>
-        <li>Jun 2020 <a href="https://karpathy.github.io/2020/06/11/biohacking-lite/">Biohacking Lite</a></li>
-        <li>Apr 2019 <a href="https://karpathy.github.io/2019/04/25/recipe/">A Recipe for Training Neural Networks</a></li>
-        <li>Nov 2017 <a href="https://karpathy.medium.com/software-2-0-a64152b37c35">Software 2.0</a></li>
-        <li>Sep 2016 <a href="https://karpathy.github.io/2016/09/07/phd/">A Survival Guide to a PhD</a></li>
-        <li>Nov 2015 <a href="https://karpathy.github.io/2015/11/14/ai/">Short Story on AI: A Cognitive Discontinuity</a></li>
-        <li>May 2015 <a href="https://karpathy.github.io/2015/05/21/rnn-effectiveness/">The Unreasonable Effectiveness of Recurrent Neural Networks</a></li>
-        <li>Sep 2014 <a href="https://karpathy.github.io/2014/09/02/what-i-learned-from-competing-against-a-convnet-on-imagenet/">What I learned from competing against a ConvNet on ImageNet</a></li>
-        <li>Oct 2012 <a href="https://karpathy.github.io/2012/10/22/state-of-computer-vision/">The state of Computer Vision and AI: we are really, really far away</a></li>
-      </ul>
-      -->
-    </div>
-    </div>
+        .entry {
+            margin: 20px 0;
+            padding: 15px 0;
+            border-bottom: 1px solid var(--border);
+        }
 
-    <div id="pet-projects" class="container">
-      <div class="ctitle">My Project Graveyard</div>
+        .entry:last-child {
+            border-bottom: none;
+        }
 
-      <div class="project">
-        <div class="pico"><img src="assets/semantic.png" /></div>
-        <div class="pdesc"><a href="https://github.com/shauray8/semantic_engine">Semantic Search Engine</a> was a GSoC project </div>
-        <div class="pend"></div>
-      </div>
+        .date {
+            font-size: 11px;
+            color: var(--text);
+            opacity: 0.6;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
 
-      <div class="project">
-        <div class="pico"><img src="assets/turing.webp" /></div>
-        <div class="pdesc"><a href="https://github.com/shauray8/turing">Turing</a> was supposed to be just a simple library built on top of numpy which would calculate gradients for your neural network with some additional features that would help in the development BUT since then my vision for Turing got a little bigger and now Turing has a C backend for tensor support with custom matmul accelerators, AVX512 for multi-core CPU's and now supports CUDA backend. Basically, this is what PyTorch is but way way way more complex, I wanted something not so complex but powerful enough! </div>
-        <div class="pend"></div>
-      </div>
+        .role {
+            font-weight: bold;
+            font-size: 14px;
+            margin: 5px 0;
+        }
 
-      <div class="project">
-        <div class="pico"><img src="assets/transformer.webp" /></div>
-        <div class="pdesc"><a href="https://github.com/shauray8/gettmore">GET-MORE!</a> is an archive of what language models looked like a while back and how they look now. Just takes a third-eye view of how we went from bi-gram models to transformer-based models. Basically, this is a little extension of what Andrej Karpathy did on his YouTube channel. This project demonstrates the SIGMOID curve of innovation and I wonder where are we right now on that curve.</div>
-        <div class="pend"></div>
-      </div>
+        .tech {
+            font-size: 12px;
+            margin: 10px 0;
+            padding-left: 15px;
+        }
 
-      <div class="project">
-        <div class="pico"><img src="assets/uncensored.webp" /></div>
-        <div class="pdesc"><a href="https://github.com/shauray8/onlygans">OnlyGans</a>
-        is currently under development and is NSFW. OnlyGans uses a fleet of SOTA generative models to generate naked individuals which would work something like thispersomdoesnotexist.com. uses some version of StyleGan to generate images and may support videos in the future. <b> Support this noble cause by contributing to the repo and make this world a better place to live !</b>.
-        </div>
+        .tech li {
+            margin: 5px 0;
+        }
 
-        <div class="pend"></div>
-      </div>
+        .project {
+            margin: 15px 0;
+            padding: 10px 0;
+        }
 
-      <div class="project">
-        <div class="pico"><img src="assets/wave.webp" /></div>
-        <div class="pdesc"><a href="https://github.com/shauray8/trachea">Trachea</a> transforms your speech to a text output. It uses a simple convolution model on mel spectrograms generated by a custom library which when presented with an audio sample would create a mel spectrogram and then the pixel data would get squished and smashed by the neural network to generate a text representation of that particular sample! It was a simple project for my deep learning class that I took in college  </div>
-        <div class="pend"></div>
-      </div>
+        .project-name {
+            font-weight: bold;
+        }
 
-      <div class="project">
-        <div class="pico"><img src="assets/compression.webp" /></div>
-        <div class="pdesc"><a href="http://github.com/shauray8/ctw">Context Tree Weighting</a> was again a college project in which I tried implementing different compression algorithms as a baseline and then tried implementing Context Tree Weighting which was not very easy and I would like to get back to it someday maybe I can have a better understanding of how compression works !! </div>
-        <div class="pend"></div>
-      </div>
+        .contact {
+            margin: 20px 0;
+        }
 
-      <div class="project">
-        <div class="pico"><img src="assets/pedal.png" /></div>
-        <div class="pdesc"><a href="https://github.com/shauray8/calib-challange">Calib-Challenge</a> was a challenge organized by Comma AI. The repo contains the code for predicting the YAW and Pitch of a moving car from the dashcam video. The project kept on going after the contest as well and now it contains some very basic code for a self-driving car. Just the software part of it, there are no bound conditions yet and it just gives out raw data that has to be processed before giving it to the car's computer. Pedal is the Operating System for the same and is UNIXish. I wanna drive a fully autonomous car with this code someday (with some improvement course!)</div>
-        <div class="pend"></div>
-      </div>
+        .contact a {
+            margin-right: 15px;
+            font-weight: bold;
+        }
 
-      <div class="project">
-        <div class="pico"><img src="assets/[en.webp" /></div>
-        <div class="pdesc"><a href="https://github.com/shauray8/quadruple_inverted_pendulum/">Quadruple Inverted Pendulum</a> was my first attempt at writing a research paper that failed (OF COURSE) it was pretty straight forward actually. It's basically 4 pendulums attached to one another and the task was to balance them on top of the prev pendulum without falling. But turns out calculating Lagrangian equations for this setup is pretty straightforward but has a lot of calculations and just to simulate the pendulums there are hundreds of thousands of calculations every sec. But then I found something very useful called GameGAN but again there was no open source code for that and I DROPPED THE IDEA !</div>
-        <div class="pend"></div>
-      </div>
+        ul {
+            list-style: none;
+            padding: 0;
+        }
 
-      <div class="project">
-        <div class="pico"><img src="assets/misc.webp" /></div>
-        <div class="pdesc">misc: I built a lot of other random stuff over time. GO check it on my GitHub and if you wanna make a change in the world and as George Hotz says "wanna win over nature" find a project on GitHub or maybe I can help you find one visit https://github.com/shauray8 and fork some repositories and start adding stuff!</div>
-        <div class="pend"></div>
-      </div>
-    </div>
+        li:before {
+            content: "→ ";
+            font-weight: bold;
+        }
 
-    <div class="container">
-      <div class="ctitle">misc unsorted</div>
-      <ul style="padding-left: 10px;">
-        <li>Who wants to work on "Error correction for cells to not get cancerous" message me on Twitter !!</li>
-        <li>I can't really find some good articles on The sigmoid curve of innovation maybe I'll write a blog on it !!</a></li>
-        <li>Some of my <a href="https://twitter.com/Shauray7">tweets</a> on deep learning</li>
-        <li>A while back I got interested in Phage Mutation (I don't know the reason). Here's something that'll get you <a href="https://theminione.com/blog/2018/05/18/lambda-phage-classic-model-keeps-evolving/">started</a></li>
-        <li><a href="https://medium.com/@SereneBiologist/finding-beauty-in-bad-algorithms-799af003aee8">Finding Beauty in Bad Algorithms</a></li>
-        <li>We can arrange some kind of dis. on the hard problem of consciousness !! I think that's a fairly misunderstood topic. message me on Twitter and maybe we can do something</li>
-        <li>I've learned a lot from George Hotz and his coding streams !!  <a href="https://geohotz.com">go have a look !</a>.</li>
-        <li><a href="http://lossfunctions.tumblr.com/">Loss function Tumblr</a> Andrej Karpathy's collection of funny loss functions.</li>
-        <li><b> This is a direct copy of Andrej Karpathy's website and 0 frameworks were used to make this simple responsive website. I kinda like this format and this is what Andrej refers to in his website - <a href="https://motherfuckingwebsite.com/">500-pound websites</a>. This one is pure HTML and CSS in two static files and that's it. </b></li>
-        <li>I first got interested in the hardware and was not a software person at first. My first Hardware interaction was when I was 8 or 9 maybe that is when I started assembling computers. and that kinda stayed with me and I still have that love for hardware I'm mildly interested in hardware hacking and if you are too go look for Joe Grand!</li>
+        .tech li:before {
+            content: "• ";
+        }
+
+        hr {
+            border: none;
+            border-top: 2px solid var(--border);
+            margin: 30px 0;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .section {
+            margin: 35px 0;
+        }
+
+        .rant {
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 20px 0;
+        }
+
+        .emphasis {
+            background: var(--text);
+            color: var(--bg);
+            padding: 2px 4px;
+            font-weight: bold;
+        }
+
+        .footer {
+            text-align: center;
+            margin: 40px 0 20px 0;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        /* Blog Cards */
+        .blog-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 20px;
+            margin: 30px 0;
+        }
+
+        .blog-card {
+            background: var(--card-bg);
+            border: 2px solid var(--border);
+            padding: 0;
+            transition: transform 0.2s;
+        }
+
+        .blog-card:hover {
+            transform: translateX(5px);
+        }
+
+        .blog-card a {
+            border: none;
+            display: block;
+            color: var(--text);
+        }
+
+        .blog-card a:hover {
+            background: transparent;
+            color: var(--text);
+        }
+
+        .blog-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            display: block;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .blog-card-content {
+            padding: 15px;
+        }
+
+        .blog-card h3 {
+            font-size: 15px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .blog-card p {
+            font-size: 12px;
+            line-height: 1.5;
+            margin-bottom: 10px;
+            opacity: 0.8;
+        }
+
+        .blog-date {
+            font-size: 11px;
+            opacity: 0.6;
+            font-style: italic;
+        }
+
+        .blog-hero {
+            text-align: center;
+            margin: 40px 0;
+            padding: 30px 0;
+            border-top: 2px solid var(--border);
+            border-bottom: 2px solid var(--border);
+        }
+
+        .blog-hero h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .blog-motto {
+            font-size: 16px;
+            font-style: italic;
+            opacity: 0.8;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 15px;
+                font-size: 12px;
+            }
+            h1 { font-size: 22px; }
+            h2 { font-size: 16px; }
+            .blog-card img {
+                height: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="#" onclick="showPage('home'); return false;" class="nav-link active">home</a>
+        <a href="#" onclick="showPage('blogs'); return false;" class="nav-link">blogs</a>
+        <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
+    </nav>
+
+    <div id="home" class="page active">
+        <h1>shauray singh</h1>
+        <p class="tagline">computers can see, hear and learn. welcome to the future!</p>
         
-
-      </ul>
-    </div>
-    <div style="padding-top: 1px; margin-top: 10px;">
-      <div id="featured-talks" class="container">
-        <div class="ctitle">Go learn some cool stuff on the <a href = "https://slatestarcodex.com/2014/07/30/meditations-on-moloch/">internet!</a></div>
+        <div class="contact">
+            <a href="https://twitter.com/shauray7">twitter</a>
+            <a href="https://github.com/shauray8">github</a>
         </div>
-      </div> 
+
+        <div class="quote-box">
+            <p>An idiot admires complexity. A genius admires simplicity. A physicist tries to make it simple. Anything that is gaining complexity, more the idiot will admire it. If you make something more clusterfuck that he can't understand, he will think you are a god because you made it so complicated nobody can understand it.</p>
+            <p class="author">- Terry Davis</p>
+        </div>
+
+        <hr>
+
+        <div class="section">
+            <h2>// work</h2>
+            
+            <div class="entry">
+                <div class="date">01/2024 - present</div>
+                <div class="role">ML guy @ ModelsLab</div>
+                <div class="rant">
+                </div>
+                Writing performant kernels for diffusion models. mostly migrated to cuteDSL now. Writing kernels for Blackwell these days. Did experiments with distributed training, distillation, some SRPO exps. Mostly video models now making them faster, squeezing better quality from opensource models. Building tools and launching products.
+                <ul class="tech">
+                    <li>I'm all about PyTorch, so if you're familiar with those ecosystems, we're off to a great start.</li>
+                    <li>I've got a love-hate relationship with CUDA and Triton - love the performance, hate the debugging headaches - maybe not the torch profiler</li>
+                    <li>I'm always on the lookout for ways to parallelize model inference, so if you've got experience with parallel processing, let's chat.</li>
+                </ul>
+                <p style="margin-top: 10px;">updates on <a href="https://twitter.com/shauray7">twitter</a></p>
+            </div>
+
+            <div class="entry">
+                <div class="date">01/2023 - 04/2023</div>
+                <div class="role">Senior Staff @ Zummit InfoLabs</div>
+                <div class="rant">
+                    Helped design companies' ML pipelines for better and faster deployment and improved access times.
+                </div>
+            </div>
+
+            <div class="entry">
+                <div class="date">10/2022 - 01/2023</div>
+                <div class="role">Jr. Data Scientist @ Zummit InfoLabs</div>
+                <div class="rant">
+                    I led a team of 5 interns and made some significant advancements in Demand Predictions which used some statistical methods and was then migrated to work with graph neural networks. Learned a lot about graph neural networks and how spatial-temporal graphs can make things faster and easier than some other traditional methods.
+                </div>
+            </div>
+
+            <div class="entry">
+                <div class="date">08/2020 - 10/2024</div>
+                <div class="role">B.Tech @ Manipal University Jaipur</div>
+                <div class="rant">
+                    Major in Data Science, minor in Finance. This is where I got really deep into deep learning by browsing the internet and attending random lectures on youtube in my dorm room.
+                </div>
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="section">
+            <h2>// Blackwell Optims for WAN2.2</h2>
+            <div class="rant">
+                This is what I'm working in my free time right now, mostly gathering up free lunches for optims and some CuteDSL kernels, currently adopting Tri Dao's FA4 for WAN2.2 since I won't need any causal masking or kv cache optimizations I'm striping it down to barebones and comparing what %sol I can achive with the knowledge I have. Also I post a lot of profiles related to these opims on X.
+            </div>
+            <ul style="margin-top: 15px;">
+                <li><a href="https://www.github.com/shauray8/blackwan">BlackWan Github</a></li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>// open source</h2>
+            <div class="rant">
+                I have a deep deep love for OpenSource. It's like lifeblood of the tech world, and I'm all in! I was a regular contributor over at Hugging Face, rolling up my sleeves and getting things done. From Transformers to tokenizers, I'm in the trenches, making things better. Sharing some of the wisdom with blogs and some low quality tweets! So, remember, open source is where it's at.
+            </div>
+            <ul style="margin-top: 15px;">
+                <li><a href="https://huggingface.co/shauray">My HuggingFace Profile</a></li>
+                <li><a href="https://twitter.com/Shauray7">Tweets/Anouncements</a></li>
+            </ul>
+        </div>
+
+
+        <hr>
+
+        <div class="section">
+            <h2>// project graveyard</h2>
+            
+            <div class="project">
+                <span class="project-name"><a href="https://github.com/shauray8/turing">Turing</a></span> - was supposed to be just a simple library built on top of numpy which would calculate gradients for your neural network with some additional features that would help in the development BUT since then my vision for Turing got a little bigger and now Turing has a C backend for tensor support with custom matmul accelerators, AVX512 for multi-core CPU's and now supports CUDA backend. Basically, this is what PyTorch is but way way way more complex, I wanted something not so complex but powerful enough!
+            </div>
+
+            <div class="project">
+                <span class="project-name"><a href="https://github.com/shauray8/semantic_engine">Semantic Search Engine</a></span> - was a stupid GSoC project
+            </div>
+
+            <div class="project">
+                <span class="project-name"><a href="https://github.com/shauray8/onlygans">OnlyGans</a></span> - is currently under development and is NSFW. OnlyGans uses a fleet of SOTA generative models to generate naked individuals which would work something like thispersondoesnotexist.com. uses some version of StyleGan to generate images and may support videos in the future. <span class="emphasis">Support this noble cause by contributing to the repo and make this world a better place to live!</span>
+            </div>
+
+            <div class="project">
+                <span class="project-name"><a href="https://github.com/shauray8/trachea">Trachea</a></span> - transforms your speech to a text output. It uses a simple convolution model on mel spectrograms generated by a custom library which when presented with an audio sample would create a mel spectrogram and then the pixel data would get squished and smashed by the neural network to generate a text representation of that particular sample! It was a simple project for my deep learning class that I took in college.
+            </div>
+
+            <div class="project">
+                <span class="project-name"><a href="http://github.com/shauray8/ctw">Context Tree Weighting</a></span> - was again a college project in which I tried implementing different compression algorithms as a baseline and then tried implementing Context Tree Weighting which was not very easy and I would like to get back to it someday maybe I can have a better understanding of how compression works!!
+            </div>
+
+            <div class="project">
+                <span class="project-name"><a href="https://github.com/shauray8/calib-challange">Calib-Challenge</a></span> - was a challenge organized by Comma AI. The repo contains the code for predicting the YAW and Pitch of a moving car from the dashcam video. The project kept on going after the contest as well and now it contains some very basic code for a self-driving car. Just the software part of it, there are no bound conditions yet and it just gives out raw data that has to be processed before giving it to the car's computer. Pedal is the Operating System for the same and is UNIXish. I wanna drive a fully autonomous car with this code someday (with some improvement of course!)
+            </div>
+
+            <div class="project">
+                <span class="project-name"><a href="https://github.com/shauray8/quadruple_inverted_pendulum/">Quadruple Inverted Pendulum</a></span> - was my first attempt at writing a research paper that failed (OF COURSE) it was pretty straight forward actually. It's basically 4 pendulums attached to one another and the task was to balance them on top of the prev pendulum without falling. But turns out calculating Lagrangian equations for this setup is pretty straightforward but has a lot of calculations and just to simulate the pendulums there are hundreds of thousands of calculations every sec. But then I found something very useful called GameGAN but again there was no open source code for that and I DROPPED THE IDEA!
+            </div>
+
+            <div class="project">
+                <span class="project-name">misc</span> - I built a lot of other random stuff over time. GO check it on my GitHub and if you wanna make a change in the world and as George Hotz says "wanna win over nature" find a project on GitHub or maybe I can help you find one visit <a href="https://github.com/shauray8">https://github.com/shauray8</a> and fork some repositories and start adding stuff!
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="section">
+            <h2>// misc unsorted brain dump</h2>
+            <ul>
+                <li>Who wants to work on "Error correction for cells to not get cancerous" message me on Twitter!!</li>
+                <li>I can't really find some good articles on The sigmoid curve of innovation maybe I'll write a blog on it!!</li>
+                <li>Some of my <a href="https://twitter.com/Shauray7">tweets</a> on deep learning</li>
+                <li>A while back I got interested in Phage Mutation (I don't know the reason). Here's something that'll get you <a href="https://theminione.com/blog/2018/05/18/lambda-phage-classic-model-keeps-evolving/">started</a></li>
+                <li><a href="https://medium.com/@SereneBiologist/finding-beauty-in-bad-algorithms-799af003aee8">Finding Beauty in Bad Algorithms</a></li>
+                <li>We can arrange some kind of discussion on the hard problem of consciousness!! I think that's a fairly misunderstood topic. message me on Twitter and maybe we can do something</li>
+                <li>I've learned a lot from George Hotz and his coding streams!! <a href="https://geohotz.com">go have a look!</a></li>
+                <li><a href="http://lossfunctions.tumblr.com/">Loss function Tumblr</a> Andrej Karpathy's collection of funny loss functions.</li>
+                <li>I first got interested in the hardware and was not a software person at first. My first Hardware interaction was when I was 8 or 9 maybe that is when I started assembling computers. and that kinda stayed with me and I still have that love for hardware.</li>
+            </ul>
+        </div>
+
+        <hr>
+
+        <div class="footer">
+            <p><a href="https://slatestarcodex.com/2014/07/30/meditations-on-moloch/">Go learn some cool stuff on the internet!</a></p>
+            <p style="margin-top: 15px; font-weight: bold;">RIP TERRY</p>
+        </div>
     </div>
-    <hr>
-    <center>RIP TERRY</center>
-    <br>
 
-  </body>
+    <div id="blogs" class="page">
+        <div class="blog-hero">
+            <h1>we must know, we will know</h1>
+            <p class="blog-motto">stem stuff. requires attention span.</p>
+        </div>
+        
+        <div class="section">
+            <p style="margin-bottom: 20px;">Refer <span class="emphasis">Twitter</span> for microblogs, this is for full length technical deep dives. Writing on STEM related topics and experimenting with the Feynman technique.</p>
+        </div>
+
+        <div class="blog-grid">
+            <div class="blog-card">
+                <a href="./blogs/gantt_chart.html">
+                    <img src="./blogs/assets/fa4.jpg" alt="FA4 Gantt Chart">
+                    <div class="blog-card-content">
+                        <h3>A little FA4 Gantt chart</h3>
+                        <p>Following Modal's great blog on FA4, here's a little gantt chart that shows how things progress in FA4.</p>
+                        <p class="blog-date">29/09/2025</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="blog-card">
+                <a href="./blogs/attn_sink.html">
+                    <img src="./blogs/assets/sink.png" alt="Attention Sink">
+                    <div class="blog-card-content">
+                        <h3>ATTENTION SINK</h3>
+                        <p>You're staring at your attention map. Token 0 the very first one is glowing because it does nothing.</p>
+                        <p class="blog-date">11/09/2025</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="blog-card">
+                <a href="./blogs/tread.html">
+                    <img src="./blogs/assets/tread_main.png" alt="TREAD">
+                    <div class="blog-card-content">
+                        <h3>TREAD: Token Routing for Efficient Architecture-agnostic Diffusion Training</h3>
+                        <p>TREAD, offers better fidelity while retaining the computational efficiency of previous methods.</p>
+                        <p class="blog-date">26/01/2025</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="blog-card">
+                <a href="./blogs/uuid.html">
+                    <img src="./blogs/assets/uuid_tit.png" alt="UUIDs">
+                    <div class="blog-card-content">
+                        <h3>UUIDs - Mess Within a Widely Used Standard</h3>
+                        <p>Optimizing databases with UUIDs, specifically the B+ Tree</p>
+                        <p class="blog-date">21/06/2024</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="blog-card">
+                <a href="./blogs/seed.html">
+                    <img src="./blogs/assets/seed_thmb.png" alt="Good Seed">
+                    <div class="blog-card-content">
+                        <h3>Good Seed Makes a Good Crop</h3>
+                        <p>Discovering Secret Seeds in Text-to-Image Diffusion Models</p>
+                        <p class="blog-date">08/06/2024</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="blog-card">
+                <a href="./blogs/ella.html">
+                    <img src="./blogs/assets/ella-inference-examples/download.png" alt="ELLA">
+                    <div class="blog-card-content">
+                        <h3>ELLA - Equip Diffusion Models with LLM for Enhanced Semantic Alignment</h3>
+                        <p>not an author, just a curious guy on the internet</p>
+                        <p class="blog-date">29/04/2024</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="blog-card">
+                <a href="./blogs/Deej.html">
+                    <img src="./blogs/assets/DEEJ.png" alt="DEEJ">
+                    <div class="blog-card-content">
+                        <h3>DEEJ - Open Source Hardware Mixer</h3>
+                        <p>A couple of hours and you have a working volume controller for your apps</p>
+                        <p class="blog-date">23/04/2024</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p><a href="#" onclick="showPage('home'); return false;">← back to home</a></p>
+        </div>
+    </div>
+
+    <script>
+        function showPage(pageName) {
+            const pages = document.querySelectorAll('.page');
+            const links = document.querySelectorAll('.nav-link');
+            
+            pages.forEach(page => page.classList.remove('active'));
+            links.forEach(link => link.classList.remove('active'));
+            
+            document.getElementById(pageName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+</body>
 </html>
-
