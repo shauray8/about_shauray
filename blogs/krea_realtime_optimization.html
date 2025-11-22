@@ -131,7 +131,7 @@ I would recommend reading <a href="https://www.krea.ai/blog/krea-realtime-14b">K
 <br>
 Unlike conventional diffusion video models (e.g., Wan 2.1), which denoise all frames in parallel using bidirectional attention, Krea Realtime uses a causal architecture, it generates frames sequentially, one block at a time, and never revises past outputs. This irreversible, streaming compatible structure enables true realtime interaction users can see the first frame in under a second, modify prompts mid-generation, restyle videos on-the-fly, and steer motion as it unfolds (SICK).
 <br>
-But converting a powerful bidirectional model into a stable autoregressive generator is nontrivial. The core challenge is exposure bias during training, most autoregressive methods condition on ground-truth frames, but at inference, they must rely on their own imperfect generations. This mismatch leads to error accumulation—minor artifacts compound across frames, causing catastrophic drift or collapse.
+But converting a powerful bidirectional model into a stable autoregressive generator is nontrivial. The core challenge is exposure bias during training, most autoregressive methods condition on ground-truth frames, but at inference, they must rely on their own imperfect generations. This mismatch leads to error accumulation, minor artifacts compound across frames, causing catastrophic drift or collapse.
 <br>
 Krea Realtime overcomes this through Self-Forcing, a data-free distillation pipeline that trains the student model exactly as it will be used by autoregressively sampling full video sequences and aligning its output distribution with the teacher via Distribution Matching Distillation (DMD). This three-stage process includes:
 <ol>
