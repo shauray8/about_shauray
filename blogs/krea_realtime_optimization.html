@@ -350,8 +350,13 @@ x = o_fa
 
 # ... update cache indices ...
 </code></pre>
-The _flash_attn_fwd function itself is a beast it's the core of FA4, handling everything from varlen sequences and paged KV to split-KV for large contexts and supports features like - Dynamic tiling (e.g., m_block_size=128, n_block_size=128), GQA/MQA packing for efficiency, Custom mods via score_mod and mask_mod, Split-KV for memory-bound scenarios.
-<br><br>
+The _flash_attn_fwd function itself is a beast it's the core of FA4, handling everything from varlen sequences and paged KV to split-KV for large contexts and supports features like - Dynamic tiling (e.g., m_block_size=128, n_block_size=128), GQA/MQA packing for efficiency, Custom mods via score_mod and mask_mod, Split-KV for memory-bound scenarios. 
+<br>
+I see so much perf that I give up on nsys. I'll upload the nsys profile somewhere and link it here.
+    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
+        <img src="./assets/krea_realtime/profile1.png" alt="Image 1" style="width: 100%; height: auto;">
+        <img src="./assets/krea_realtime/profile2.png" alt="Image 2" style="width: 100%; height: auto;">
+    </div>
 I started with untuned shapes no autotuning for tile sizes or clusters which meant the initial inference times actually increased compared to Flex Attention. The overhead from dynamic compilation and the custom mod added up, especially for Krea-Realtime's long sequences. But this was expected FA4 shines when tuned.
 <br>
 With some changes like enabling autotuning, adjusting block sizes (m_block_size, n_block_size), or even integrating split-KV I believe I can bring it down to a respectable number. The CuTe integration allows for that flexibility, and ongoing work in the FlashAttention repo (e.g., Blackwell-specific fixes) should help. Plus, combining this with FP8 (once the DLPack issue is sorted) could be explosive.
@@ -432,6 +437,30 @@ I'm not good at prompting but here is V2V with all the above mentioned tricks an
         // Initialize the slider
         initComparisons();
     </script>
+
+<h3>Profile insights on warmup</h3>
+<p>
+The denoising_loop dominates at 41%, which makes sense for an autoregressive video model it's the core sampling loop. Transformer steps (0-4) eat up another ~30% combined, with recompute_kv_cache at 16% highlighting the cost of our block-causal KV recomputation. VAE decode is minor (1.4%), but text encoding is quick.
+    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
+        <img src="./assets/krea_realtime/nsys1.png" alt="Image 2" style="width: 100%; height: auto;">
+    </div>
+
+cudaMemcpyAsync (78.3%) and cudaStreamSynchronize (18.5%) dominate lots of async copies and sync waits, likely from data movement in FA4 and KV cache. Kernel launches are cheap (1.4%), but mallocs add up.
+
+    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
+        <img src="./assets/krea_realtime/nsys2.png" alt="Image 2" style="width: 100%; height: auto;">
+    </div>
+
+    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
+        <img src="./assets/krea_realtime/nsys3.png" alt="Image 2" style="width: 100%; height: auto;">
+    </div>
+
+    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
+        <img src="./assets/krea_realtime/nsys4.png" alt="Image 2" style="width: 100%; height: auto;">
+    </div>
+
+</p>
+
 
 <h3>Next Steps</h3>
 I've made solid progress with custom linears, FP8 experiments, mask tweaks, and FA4 integration, but there's still plenty of low-hanging fruit (and some tougher nuts) to crack for ultimate performance. Here's my roadmap for the coming weeks.
