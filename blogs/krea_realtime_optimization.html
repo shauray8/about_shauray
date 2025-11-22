@@ -462,7 +462,7 @@ cudaMemcpyAsync (78.3%) and cudaStreamSynchronize (18.5%) dominate lots of async
 </p>
 
 
-<h3>Next Steps</h3>
+<h3>Next Steps Part-2</h3>
 I've made solid progress with custom linears, FP8 experiments, mask tweaks, and FA4 integration, but there's still plenty of low-hanging fruit (and some tougher nuts) to crack for ultimate performance. Here's my roadmap for the coming weeks.
 <br><br>
 PyTorch Compile/Inductor now supports targeting NVIDIA's Python CuTeDSL (alongside Triton), enabling up to 2x faster Flex Attention compared to Triton-based implementations. This is huge for Krea-Realtime, since Flex Attention is our fallback for complex block-sparse masks.
