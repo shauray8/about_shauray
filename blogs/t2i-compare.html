@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Z Image Turbo vs Qwen Image 2512 - Text to Image Comparison</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="A side-by-side comparison of Z Image Turbo and Qwen Image 2512 text-to-image models across 20 diverse prompts">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="main.css">
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-1DD05WB973"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-ZHQ68Z8NS3');
+    </script>
+
+    <style>
+      .post-header h1 {
+          font-size: 35px;
+      }
+      .comparison-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 30px 0;
+      }
+      .comparison-table th {
+          background-color: #333;
+          color: #fff;
+          padding: 15px;
+          text-align: center;
+          font-weight: 500;
+          font-size: 18px;
+      }
+      .comparison-table td {
+          padding: 15px;
+          border: 1px solid #e8e8e8;
+          vertical-align: top;
+      }
+      .comparison-table tr:nth-child(even) {
+          background-color: #f9f9f9;
+      }
+      .comparison-table img {
+          width: 100%;
+          max-width: 400px;
+          height: auto;
+          border-radius: 4px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      }
+      .prompt-cell {
+          font-size: 13px;
+          line-height: 1.6;
+          color: #444;
+          max-width: 300px;
+          word-wrap: break-word;
+      }
+      .prompt-number {
+          font-weight: bold;
+          color: #2a7ae2;
+          display: block;
+          margin-bottom: 8px;
+      }
+      .image-cell {
+          text-align: center;
+      }
+      .model-label {
+          font-size: 12px;
+          color: #666;
+          margin-top: 8px;
+      }
+      @media screen and (max-width: 900px) {
+          .comparison-table {
+              display: block;
+              overflow-x: auto;
+          }
+          .comparison-table img {
+              max-width: 250px;
+          }
+          .prompt-cell {
+              font-size: 11px;
+              max-width: 150px;
+          }
+      }
+    </style>
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+
+  <div class="wrap">
+
+    <a class="site-title" href="./blog.html">We Must Know, We Will Know</a>
+    
+</header>
+
+
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>Z Image Turbo vs Qwen Image 2512 - Text to Image Comparison</h1>
+    <p class="meta">Jan 2, 2026</p>
+  </header>
+
+  <article class="post-content">
+
+<p>Text-to-image generation has come a long way, with new models pushing the boundaries of what's possible in terms of prompt adherence, aesthetic quality, and generation speed. In this comparison, we pit two notable models against each other: <b>Z Image Turbo</b> and <b>Qwen Image 2512</b>. Z Image Turbo is known for its speed-optimized architecture while maintaining impressive visual fidelity, whereas Qwen Image 2512 brings the power of Qwen's multimodal understanding to image generation. We tested both models across 20 diverse prompts ranging from abstract art and anime styles to photorealistic portraits and complex scene compositions. The results speak for themselves - scroll through the comparison table below to see how each model interprets and renders these challenging prompts.</p>
+
+<table class="comparison-table">
+  <thead>
+    <tr>
+      <th>Prompt</th>
+      <th>Z Image Turbo</th>
+      <th>Qwen Image 2512</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#1</span>
+        (masterpiece), best quality, abstract, abstract art, illustration, anime, black and gold, white and gold, ((red flower), simple background, white background), melting, detailed, cosmic print, constellations, cinematic, light particles, sci-fi, (space, fire, moon, water)
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/1.png" alt="Z Image Turbo - Prompt 1">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/1.png" alt="Qwen Image 2512 - Prompt 1">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#2</span>
+        A vibrant, extreme neon-soaked scene captured in a dramatic Dutch angle, featuring a charismatic figure in a futuristic astronaut helmet with pink bunny ears. The black visor of the helmet displays a glowing cartoonish smile and two bright, abstract eyes represented by luminous crosses. The character strikes a dynamic combat pose, exuding confidence, with their semi-transparent energy rifles glowing in electric blue and pink, casually held upward, as if ready for action. They wear a rugged, flamboyant pink fur cape over sleek high-tech armor. Comets streak across a fiery cosmic backdrop filled with colorful nebulae, rocky debris, and distant planets. The surreal, chaotic energy of the setting amplifies the playful yet menacing aura of the bunny-eared warrior, standing at the center of an explosive galactic battlefield.
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/2.png" alt="Z Image Turbo - Prompt 2">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/2.png" alt="Qwen Image 2512 - Prompt 2">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#3</span>
+        A macro-microscopic image of a thin kiwi slice submerged in water, showing dozens of minuscule air bubbles clinging to its surface. The slice is backlit, with light passing through the translucent green flesh and radiating black seeds. The focus is on fine cellular texture and bubble detail. Only a partial section of the slice is visible. Dark background.
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/3.png" alt="Z Image Turbo - Prompt 3">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/3.png" alt="Qwen Image 2512 - Prompt 3">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#4</span>
+        3l3ganc3, (watercolor art:1.1), scene of a woman sitting on metal steps in front of an apartment building, sunset, 1girl, solo, short orange hair, cropped white tank top, ruffled black mini skirt, pink mesh top, white pantyhose, sheer, high top sneakers, holding can of beer, BREAK,
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/4.png" alt="Z Image Turbo - Prompt 4">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/4.png" alt="Qwen Image 2512 - Prompt 4">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#5</span>
+        The girl is sitting on steps in front of a building. She is relaxed and bored. She looks up slightly, surveying the scene around her. Her posture is casual. A sense of calmness and loneliness is present despite the hustle from the city lights around her. Wide shot.
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/5.png" alt="Z Image Turbo - Prompt 5">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/5.png" alt="Qwen Image 2512 - Prompt 5">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#6</span>
+        A hauntingly realistic, melancholic portrait of a European woman with white, cracked skin, resembling aged, fractured stone. Soft, glowing orange veins run delicately through the cracks like molten lava, creating a subtle, ethereal illumination. Her expression is enigmatic and slightly seductive, with parted lips and an intense, captivating gaze. One eye remains whole and alert, while the other is fragmented, adding a mysterious allure. Her long, flowing hair drapes softly over one shoulder, while the other side is shaved, emphasizing contrast. Nestled within a large, hollow opening in her cracked skull, a small European robin perches prominently, its vibrant red-orange breast and glowing head sharply contrasting against the shadowed recess. The bird is softly but vividly illuminated, its feathers catching the light and adding a striking, almost magical presence. The robin's alert, expressive eyes and detailed plumage create a strong focal point. The background fades into rich, deep shadows, with gentle, soft-focus lighting creating a surreal, painterly atmosphere. The image conveys the fragile beauty of imperfection, the interplay of decay and life, and a quiet, melancholic serenity. Highly detailed textures of cracked stone, flowing hair, and vivid feathers, with soft, dramatic light emphasizing depth, contrast, and ethereal beauty.
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/6.png" alt="Z Image Turbo - Prompt 6">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/6.png" alt="Qwen Image 2512 - Prompt 6">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#7</span>
+        tenshi kaiwai,kawaii girl, soft pastel lighting,Live concert shot of a cute 20-year-old Japanese idol girl with short black bob and blunt bangs, wearing an oversized pastel baby-blue sailor-style t-shirt with glittery light-blue text and small cute motifs, huge elaborate white lace frilly headdress with veil, white lace fingerless gloves, white choker with silver heart pendant, holding a microphone close to her mouth with both hands, eyes half-closed in emotion, strong blue-white stage spotlight from the front and warm yellow spot from above, dark blurred crowd and raised hands in the background, dreamy bokeh, slight motion blur on hair, high contrast concert lighting, soft film grain, taken with Sony A7IV + 85mm f/1.4 wide open, photorealistic, emotional idol live atmosphere
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/7.png" alt="Z Image Turbo - Prompt 7">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/7.png" alt="Qwen Image 2512 - Prompt 7">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#8</span>
+        tenshi kaiwai,kawaii girl, soft pastel lighting,Cute 20-year-old Korean girl with straight black hair in low twintails, blunt bangs, pink star hair clip on the left, big sparkling eyes, small pout, doing the double paw pose (both hands up like cat paws next to face), wearing an oversized pastel mint turquoise tracksuit with white stripes and star patches on sleeves, the jacket has a large bold black metal font "tenshi kaiwai" printed across the chest with a tiny chibi angry skull underneath, light blue backpack, standing in the snacks aisle of a brightly lit Korean supermarket (yellow and red instant noodle boxes in background), colorful packaging, harsh fluorescent store lighting, playful and rebellious expression, ultra-sharp iPhone selfie style, realistic skin, vibrant colors, photorealistic -
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/8.png" alt="Z Image Turbo - Prompt 8">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/8.png" alt="Qwen Image 2512 - Prompt 8">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#9</span>
+        multiple cats, domestic cat, four cats, orange tabby cat, calico cat, black tabby cat, white tabby cat, striped kitten, on rooftop, sitting in a row, back view, tail hanging down, tail down,sunny day, soft shadows, warm lighting, vibrant colors, slice of life, serene_mood,bluesky, white clouds, urban rooftop, concrete wall, plants in foreground, tree, open air, peaceful afternoon,   masterpiece, amazing quality, best quality, scenery, painterly, anime coloring
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/9.png" alt="Z Image Turbo - Prompt 9">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/9.png" alt="Qwen Image 2512 - Prompt 9">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#10</span>
+        A realistic, 4k image of a An extraordinary photograph capturing a breathtaking landscape at dawn, featuring a majestic mountain range silhouetted against a vibrant sky painted in shades of orange, pink, and purple. The foreground showcases a serene lake reflecting the colorful sky and the surrounding lush greenery, with delicate mist hovering over the water's surface. Wildflowers in full bloom add splashes of color along the shoreline, while a lone eagle soars gracefully in the clear, crisp air above. The overall atmosphere evokes a sense of tranquility and awe, inviting viewers to immerse themselves in the beauty of nature (Indistinguishable from real:1.9)
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/10.png" alt="Z Image Turbo - Prompt 10">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/10.png" alt="Qwen Image 2512 - Prompt 10">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#11</span>
+        AlaMagna Style. A surreal double exposure masterpiece featuring the side profile silhouette of a mysterious figure wearing a heavy, textured hood that resembles weathered stone or coarse grey fabric. The interior of the silhouette blends seamlessly with a breathtaking forest landscape. Inside the figure's form, a winding river with cascading white waterfalls flows down through a dense grove of tall pine trees. Golden sunlight pierces through the misty forest canopy, creating a radiant, warm glow in the center where the face and neck would be, contrasting with the cool, dark greys of the outer hood. The bottom of the image sees the landscape and silhouette dripping and dissolving into the neutral, muted grey background. Cinematic lighting, ethereal atmosphere, highly detailed, photorealistic textures, mystical and moody concept art, 8k resolution. &lt;lora:Alastar_ZIT_E10:0.7&gt;
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/11.png" alt="Z Image Turbo - Prompt 11">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/11.png" alt="Qwen Image 2512 - Prompt 11">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#12</span>
+        Highly detailed realistic oil painting, loose gestural strokes, drybursh accents. A young male figure seated on a white office chair, wearing a loose white t-shirt and tight black athletic shorts. Narrow shoulders, thin legs extended, bare feet on the floor. Soft window light from the left casts outlines. An abstract background with dappled tree shadows. Shallow depth of field, cinematic darkness, sharp highlights. &lt;lora:Z_illustration_we_ne_v1:0.7&gt;
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/12.png" alt="Z Image Turbo - Prompt 12">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/12.png" alt="Qwen Image 2512 - Prompt 12">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#13</span>
+        muse art style, powerful Black man in long black trench coat, intense expression as a supernatural hunter walking through dense swirling fog on rainy New York City street at night, dramatic low-key lighting with soft rim light highlighting sharp jawline and muscular build, neon signs and street lamps glowing in background through mist, cinematic chiaroscuro with deep shadows and subtle highlights on dark skin, moody atmospheric fine-art portrait, high detail professional photography, &lt;lora:muse_art_zit_v12025-12-31_05-20-54-save-3499-3-625:0.8&gt;
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/13.png" alt="Z Image Turbo - Prompt 13">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/13.png" alt="Qwen Image 2512 - Prompt 13">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#14</span>
+        lunevacyber realistic photograph of Scene: An empty alley after rain; a solitary streetlamp, wet asphalt with puddles, a brick wall with a faded poster. Center frame stands a clown in a worn white tailcoat and gloves; heavy makeup, smeared red mouth, hard-drawn brows. In one hand—a long black balloon on a string (no text).
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/14.png" alt="Z Image Turbo - Prompt 14">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/14.png" alt="Qwen Image 2512 - Prompt 14">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#15</span>
+        Light: Hard top key from the streetlamp creates a halo and deep eye-socket shadows; a cool back fill from deeper in the alley (bluish shop/neon spill) edges the shoulders and balloon; slight haze for volumetric beams; crisp puddle highlights. Camera Position: [low angle] [mid-shot]—camera almost on the ground, individual paving textures visible; subtle tilt 2–3° for unease; 50–85 mm so face/makeup read large while the background falls to soft bokeh. Object Placement: Clown on the left third, body 3/4 to camera, head slightly tilted; one arm hangs loose, the other holds the balloon string close to the lens, forming a strong diagonal; shoe tips point toward us. Atmosphere: A thriller film still—post-rain hush, distant city hum; the clown fixes the gaze—tension and hypnosis instead of loud theatrics.Exposure/Motion: 1/10–1/15 s with gentle camera drag + a hint of rear-curtain flash—eyes, mouth, and balloon hand tack-sharp while rain droplets and haze trace fine light trails. f/2.8–f/4, ISO 200. Effects/Tags: dramatic, blurredivision (soft halation on lamp/neon highlights), photoreal, ultra-detailed, high micro-contrast, optical refraction in puddles/droplets, natural skin (under makeup), film grain subtle, 4K PNG. photorealistic quality, professional cinematography, directional lighting with sharp dramatic shadows
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/15.png" alt="Z Image Turbo - Prompt 15">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/15.png" alt="Qwen Image 2512 - Prompt 15">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#16</span>
+        lunevacyber realistic photograph of masterpiece, ultra‐photorealistic, 8K, Vogue‐style street photography, front view  an elemental woman shaped from storm, mist, ice, and breath, semi‐translucent skin with swirling frost patterns, soft vapor drifting from her form, subtle internal glow like frozen moonlight; walking down a city street, every step turning the pavement icy blue, frost blooming outward around her, normal warm‐colored street farther away for strong contrast; wearing an icy‐blue turtleneck sweater dress, long sleeves, shimmering like frozen wool; icy‐blue knee‐high boots with crystalline texture; holding a frosted coffee cup and a small ice‐blue purse; hair made of cold mist and pale blonde strands, flowing in loose waves as if moved by a gentle storm; warm smile formed from soft vapor, breath visible in the air; super realistic lighting, crisp highlights on ice textures, soft atmospheric mist around her, cinematic depth, high‐end fashion editorial mood. photorealistic quality, professional cinematography, directional lighting with sharp dramatic shadows
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/16.png" alt="Z Image Turbo - Prompt 16">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/16.png" alt="Qwen Image 2512 - Prompt 16">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#17</span>
+        A confident saloon dancer moves through a dim wooden tavern, her body caught mid motion as she lifts the edge of her layered skirt. She wears a deep red corset with fine stitching and worn fabric, tightly laced and shaped by years of performance. Her hair flows in soft waves around her shoulders, catching warm lamplight that highlights her skin and subtle jewelry. Dust swirls gently around her legs and waist, glowing in the smoky amber light that fills the room. Wooden tables and stools fade into the background, softened by haze and drifting particles. The air feels warm, dry, and alive with quiet tension, balancing elegance, sensuality, and raw frontier grit. The scene carries a cinematic, tactile realism, grounded in texture, motion, and atmosphere, in a dustbound grit style.
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/17.png" alt="Z Image Turbo - Prompt 17">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/17.png" alt="Qwen Image 2512 - Prompt 17">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#18</span>
+        [same person every image, consistent facial identity,23-year-old female influencer named Sara,163 cm tall, light olive skin,long curly dark hair,hazel eyes,distinct facial structure:soft oval face, wide expressive eyes,straight nose with rounded tip,full lips, subtle asymmetry in smile, curvy body type,narrow waist, wide hips,full bust, feminine proportions,natural confident posture, do not change face or body] outfit:oversized t-shirt and shorts, hair style:messy hair, location: small apartment bathroom, activity: taking a mirror selfie, expression: relaxed and slightly tired,sleepy expression, unposed moment, candid lifestyle photography, handheld smartphone photo, shot on iPhone 15 Pro max, wide lens, f/1.8, computational photography, smart HDR, harsh overhead bathroom lighting, uneven shadows, imperfect exposure, slight overexposed highlights, subtle motion blur from hand movement, rolling shutter distortion, JPEG compression artifacts, minor chroma noise, Instagram upload quality, natural skin texture, visible pores, subtle blemishes, under-eye shadows, slight facial asymmetry, imperfect framing
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/18.png" alt="Z Image Turbo - Prompt 18">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/18.png" alt="Qwen Image 2512 - Prompt 18">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#19</span>
+        Horror-themed (extreme close shot of eyes :1.3) of nordic woman, (war face paint:1.2), mohawk blonde haircut wit thin braids, runes tattoos, sweat, (detailed dirty skin:1.3) shiny, (epic battleground backgroun :1.2), analog, haze, (lens blur :1.3), hard light, sharp focus on eyes, low saturation, by ilya kuvshinov and flora bosil, eerie, unsettling, dark, spooky, suspenseful, grim, highly detailed
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/19.png" alt="Z Image Turbo - Prompt 19">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/19.png" alt="Qwen Image 2512 - Prompt 19">
+      </td>
+    </tr>
+    <tr>
+      <td class="prompt-cell">
+        <span class="prompt-number">#20</span>
+        bo-golden, igh quality, ultra detailed, colorful, dark fantasy, a highly detailed, digital artwork depicting a fantastical, white snake coiled around a human figure, the snake's scales are intricately detailed, with a textured, almost porcelain-like texture, and its head is prominently displayed, showcasing sharp, pointed teeth and a serene expression, the human figure's face is not visible, but its eyes are a vivid red, adding a striking contrast to the otherworldly nature of the snake, the background features a blurred, ethereal scene with soft, muted colors, suggesting a tranquil, otherworldly environment, the tree branches are adorned with delicate, pink cherry blossom flowers, which add a touch of warmth and beauty to the scene, the overall composition is balanced, with the snake and human figure occupying the central focus, while the cherry blossoms provide a subtle, natural backdrop, enhancing the serene and mystical atmosphere of the artwork
+      </td>
+      <td class="image-cell">
+        <img src="./assets/zit/20.png" alt="Z Image Turbo - Prompt 20">
+      </td>
+      <td class="image-cell">
+        <img src="./assets/qwen_image/20.png" alt="Qwen Image 2512 - Prompt 20">
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+<h5>Notes</h5>
+<p style="font-size:12px">
+Both models were tested with default settings. LoRA tags in prompts were kept as-is to test how each model handles unknown tokens. Results may vary with different seeds and sampling parameters.
+</p>
+
+  </article>
+</div>
+      </div>
+    </div>
+
+    </body>
+</html>
