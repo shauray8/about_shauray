@@ -314,7 +314,7 @@ Gradient Clipping Sensitivity: Despite setting max_grad_norm: 10.0, I observe no
 <br>
 Validation-Driven Scheduling: The ReduceLROnPlateau scheduler detected the stagnation (epochs_without_improvement rose to 2), but the learning rate remained constant at 1e-4. For unstable RL-distillation runs, a more aggressive decay-on-spike policy is to be used I think.
 </p>
-<h4>Conclusion</h4>
+<h3>Conclusion</h3>
 I'm not quite sure on what to conclude here, from what I see this should work but requires a lot of hyperparam tunes, and in hindsight I should have gone for 8xH200 to ensure more batches per bkwd pass and that would have given me more epochs and in turn more validation runs. Since relying on just how the loss moves on distillation runs is not a very good indicator of how the training goes i should have a different parameter helping the training run. Anyways all the configs and training scripts with augmented scripts for all the RL stuff lives here <a href="https://github.com/shauray8/TwinFlow-Qwen">shauray8/TwinFlow-Qwen</a>
 
 <hr>
