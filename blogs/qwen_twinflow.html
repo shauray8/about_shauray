@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Qwen-Image TwinFlow Distillation</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="Krea Realtime Optimizations">
+    <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Shauray Singh blog posts" />
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+
+  <div class="wrap">
+
+    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    
+</header>
+
+
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>Enhancing TwinFlow with Latent-Space RL and Dynamic Noise Scheduling for Qwen-Image-2512</h1>
+    <p class="meta">Feb 28, 2026</p>
+  </header>
+
+  <article class="post-content">
+  <style>
+    * {box-sizing: border-box;}
+    .img-comp-container {
+            position: relative;
+            max-width: 800px; /* Adjust max width as needed */
+            margin: 0 auto; /* Center the container */
+            height: 400px; /* Set a fixed height; adjust based on your GIF dimensions */
+        }
+
+        .img-comp-img {
+            position: absolute;
+            width: 100%; /* Full width for both */
+            height: 100%; /* Full height for both */
+            overflow: hidden;
+        }
+
+        .img-comp-img img {
+            display: block;
+            vertical-align: middle;
+            width: 100%; /* Make images fill the container */
+            height: 100%;
+            object-fit: cover; /* Ensure GIFs cover the area without distortion */
+        }
+
+        .img-comp-slider {
+            position: absolute;
+            z-index: 9;
+            cursor: ew-resize;
+            width: 4px; /* Thin vertical line */
+            height: 100%; /* Full height of container */
+            background-color: #ffffff; /* White line; change to #000000 for black */
+            opacity: 0.8; /* Slightly transparent */
+            top: 0; /* Start from top */
+            left: 50%; /* Initial position in the middle */
+        }
+
+        /* Optional: Add a subtle shadow or border for better visibility */
+        .img-comp-slider::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -2px; /* Center the shadow */
+            width: 8px;
+            height: 100%;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .img-comp-container {
+                height: 200px; /* Smaller height on mobile */
+            }
+        }
+
+    .gif-container {
+        max-width: 100%;
+        height: auto;
+    }
+    .gif-container img {
+        width: 100%;
+        height: auto;
+    }
+    .post-header h1 {
+        font-size: 35px;
+    }
+    .post pre,
+    .post code {
+        font-size: 13px;
+        background: none;
+        border: none;
+    }
+    .code-block {
+        border: 1px solid #d5d5e9;
+        border-radius: 4px;
+        overflow: hidden;
+        margin: 1.2em 0;
+    }
+    .code-header {
+        background: #eef;
+        padding: 5px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #d5d5e9;
+    }
+    .code-lang {
+        font-size: 11px;
+        color: #999;
+        font-family: monospace;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .copy-btn {
+        background: none;
+        border: 1px solid #c0c0d5;
+        color: #999;
+        padding: 2px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 11px;
+        transition: all 0.15s;
+    }
+    .copy-btn:hover { border-color: #888; color: #444; }
+    .code-block pre[class*="language-"] { margin: 0; border-radius: 0; border: none; background: #f8f8ff; }
+    .gif-row {
+      display: flex;          
+      flex-wrap: nowrap;      
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+    }
+    .gif-row img {
+        max-width: 50%; 
+        height: auto;
+    }
+</style>
+
+
+<div class="gif-container">
+    <video src="./assets/twinflow_qwen/distillation.mp4" autoplay loop muted playsinline style="width:100%;height:auto;display:block;"></video>
+    <center><p style="font-size:10px">Samples for the final run, sampled every 100 steps [1328x1328 | 2 NFE's]</p></center>
+</div>
+<h3>Abstract</h3>
+<p>
+Efficient inference in large flow models often demands a trade-off between sampling steps and generation quality. While <a href="https://github.com/inclusionAI/TwinFlow">TwinFlow</a> offers a discriminator-free pathway to 1-step generation via twin-trajectory velocity matching, standard distillation inherently caps student performance at the teacher's level. In this blog, I aim to detail a modified training framework for Qwen-Image-2512 that integrates TwinFlow with latent-space Reinforcement Learning and Dynamic Renoise Sampling much like <a href="https://github.com/vvvvvjdy/dmdr">DMD-R</a> and I was also inspired by this <a href="https://x.com/fal/status/2005690257979707496"> post</a> from FAL. Here I'll try to explore the mathematical foundations of these enhancements, scaling them using FSDP2, and the configuration used to achieve somewhat good 2-step generation atleast enough to prove that this could work.
+</p>
+<h3>Introduction</h3>
+<p>
+The deployment of 20B+ parameter models like Qwen-Image-2512 is frequently bottlenecked by inference latency. Standard flow matching or diffusion pipelines require 28-50 Number of Function Evaluations (NFEs) to produce high-fidelity samples. Distillation techniques aim to compress this trajectory, but traditional methods face a dichotomy: adversarial distillation (e.g., GAN-based) introduces training instability and memory overhead, while consistency-based methods often degrade sharply below 4 NFEs.
+<br>
+Comes TwinFlow: utilizing a self-adversarial twin-trajectory objective to straighten flow paths without external discriminators. However, pure distillation suffers from a "performance ceiling" the student cannot exceed the teacher's distribution quality.
+<center><img src="./assets/twinflow_qwen/overview.png" alt="TwinFlow Overview"></center>
+<br>
+In this work, I try to extend the TwinFlow framework by integrating RL-guided optimization and Dynamic Renoise Sampling. These enhancements allow the student model to escape local modes inherent in the teacher's distribution while stabilizing the early training phase. I'll also add details for the infrastructure upgrades required to train this setup efficiently using FSDP2, validation loops, and bucketed datasets.
+</p>
+
+<h3>The TwinFlow Foundation</h3>
+<p>
+At its core, TwinFlow operates within the Any-Step Generative Model Framework (based on RCGM). The key innovation is the extension of the time interval from \(t \in [0,1] \to t \in [-1,1]\), creating two symmetric trajectories originating from the noise distribution. Though I would recomend reading the <a href="https://arxiv.org/pdf/2512.05150">TwinFlow paper</a> rather then this!
+<h4>Twin Trajectories</h4>
+The standard flow (positive branch, t &gt; 0) maps noise to real data. The twin flow (negative branch, t &lt; 0) maps noise to "fake" data produced by the model itself. This structure enables a self-contained adversarial objective. 
+<br>
+Given a noise sample \(z \sim \mathcal{N}(0, \mathbf{I})\), the perturbed real sample is:
+\[
+x_t^{\mathrm{real}} = \alpha(t) \, z + \gamma(t) \, x_t^{\mathrm{real}}
+\]
+The perturbed fake sample (using model output \(\hat{\mathbf{x}}_t\)) is:
+\[
+x_t^{\mathrm{fake}} = \alpha(t')\, z^{\mathrm{fake}} + \gamma(t')\, \hat{x}_t
+\]
+<h4> Velocity Matching & Rectification </h4>
+The learning objective minimizes the discrepancy between the velocity fields of these two trajectories. Under linear transport \((\alpha(t) = t,\ \gamma(t) = 1 - t)\) , the score function \(s(x_t)\) relates to the velocity field \(F_\theta\) as:
+\[
+s(\mathbf{x}_t) = -\frac{ \mathbf{x}_t + (1-t) F_\theta(\mathbf{x}_t, t) }{t}
+\]
+The distribution matching problem is recast as a velocity matching problem. Defining the velocity difference \(\Delta v\):
+\[
+\Delta v(\mathbf{x}_t) := v_{\mathrm{fake}}(\mathbf{x}_t, -t) - v_{\mathrm{real}}(\mathbf{x}_t, t)
+\]
+The Rectification Loss encourages the model to straighten the generative trajectory, enabling few-step generation, In my implementation (twinflow.py), this is handled within the <code class="language-python">training_step</code> method, where <code class="language-python">prepare_inputs</code> constructs the twin time conditions (tt) and masks (sample_masks) to partition the batch between standard flow matching and twin-flow rectification. 
+</p>
+
+<h3>Breaking the Ceiling: RL-Guided Distillation</h3>
+<p>
+A critical limitation of distribution matching is that the student converges to the teacher's distribution \(p_{teacher}\). If the teacher has mode collapse or suboptimal aesthetics, the student inherits them. To circumvent this, I added an RL loss term that optimizes directly for human preference scores.
+<h4>The Objective</h4>
+The total loss function becomes: \(L_{total} = L_{TwinFlow} + \lambda_{rl} L_{rl}\), Where \(L_{rl}\) is derived from a reward model \( R_{\phi}\) (e.g., HPSv2). Instead of policy gradient methods that require sampling multiple steps per update, I tend to utilize reward gradients projected into the latent space.
+<h4> Latent-Space Gradient Projection</h4>
+Computing gradients directly in latent space is challenging due to the non-linear VAE mapping. I used a finite-difference approximation via pixel-space perturbation:
+<ul>
+  <li>Decode: Convert latent fake samples \(z_{fake}\) to pixels \(x_{pix} = VAE_{dec}(z_{fake})\).</li>
+  <li> Reward Gradient: Compute \(\nabla_{x_{pix}}R_{\phi}(x_{pix}, prompt)\).</li>
+  <li> Perturb & Re-encode: Modify pixels in the reward-improving direction \(\tilde{x}_{pix} = x_{pix} - \eta\nabla_{x_{pix}}R \), then encode back \( \tilde{z}_{fake} = VAE_{enc}(\tilde{x}_{pix}) \).</li>
+  <li> Latent Gradient: The update direction is approximated as \( g_{latent} \approx z_{fake} - \tilde{z}_{fake} \). </li>
+</ul>
+In twinflow.py, this is implemented in <code class="language-python">compute_rl_gradients</code>:
+<pre><code class="language-python">
+def compute_rl_gradients(self, model, fake_samples, prompts, step):
+    if not self.use_rl or step < self.rl_warmup_steps:
+        return torch.zeros_like(fake_samples)
+
+    # Decode latents → pixels
+    fake_pixels = model.latents_to_pixels(fake_samples)
+
+    # Compute pixel-space reward gradients
+    pixel_grads = compute_reward_gradients(self.reward_model, fake_pixels, prompts)
+
+    # Project pixel-space gradients → latent-space via finite differences
+    pixels_modified = (fake_pixels - self.rl_weight * pixel_grads).clamp(-1, 1)
+    latents_modified = model.pixels_to_latents(pixels_modified)
+
+    return fake_samples - latents_modified
+</code></pre>
+<h4>Cold Start & Warmup</h4>
+RL signals are noisy when the generator produces unintelligible images. To mitigate reward hacking and instability, I added a warmup period <code class="language-python">rl_warmup_steps: 2000</code>. During this phase, \(\lambda_{rl} = 0 \), allowing the TwinFlow loss to establish basic coherence before RL fine-tunes aesthetics.
+</p>
+<h3>Stabilizing Convergence: Dynamic Renoise Sampling</h3>
+<p>
+In the early stages of distillation, the student distribution \(p_{fake}\) diverges significantly from the real distribution \( p_{real}\). Standard uniform noise sampling \( t \sim \mathrm{Uniform}(0,1) \) can lead to unreliable score estimates when overlap is sparse.
+<br>
+For that I adopted the Dynamic Renoise Sampling strategy (similar to DynaRS) from DMD-R. The core idea is to bias the sampling of renoise levels \( t \) towards higher noise values (where signal-to-noise ratio is lower but structural overlap is higher) early in training, gradually transitioning to uniform sampling.
+<br><br>
+Sampling \(t\) from a Beta distribution \(Beta(\alpha, \beta) \) where \( \alpha \) decays over training steps:
+\[
+\alpha(step) = \alpha_{start} \cdot (1-progress) + \alpha_{end} \cdot progress
+\]
+In twinflow.py, this is handled by <code class="language-python">sample_renoise_time_dynamic</code>:
+<pre><code class="language-python">
+def sample_renoise_time_dynamic(self, x: torch.Tensor, step: int) -> torch.Tensor:
+    bias = self.get_dynamic_renoise_bias(step)
+    if bias > 0:
+        # Sample with bias toward higher t (more noise)
+        # Use Beta distribution: Beta(bias, 1) skews toward 1
+        t = self.sample_beta(bias, 1.0, x)
+    else:
+         # Uniform sampling (standard TwinFlow)
+        t = self.sample_beta(1.0, 1.0, x)
+    return t
+</code></pre>
+<ul>
+  <li>Global Structure First: High noise levels force the model to learn global semantics before fine details.</li>
+  <li> Score Reliability: At high noise, even poor generator outputs lie in a regime similar to the real score estimator, providing valid gradient directions when distributions are far apart.</li>
+  <li>Smooth Transition: As the model improves, the bias decays (renoise_schedule: [4.0, 1.0, 3000]), allowing learning of finer details via uniform sampling.</li>
+</ul>
+</p>
+<h3>FSDP2 & Training Infrastructure</h3>
+<p>
+Training a 20B parameter model with these additional loss terms requires significant infrastructure improvements over the original TwinFlow repository. For starters I migrated the codebase from FSDP1 to FSDP2 <code class="language-python">torch.distributed.fsdp.fully_shard</code> and added a validation pipeline.
+<h4>FSDP2 Sharding</h4>
+The original repo used standard FSDP wrappers. I switched them to <code class="language-python">fully_shard</code> for fine-grained memory control, applying it recursively to transformer blocks. And I disabled the resharding after forward pass for the final block to optimize backward pass gathering.
+<pre><code class="language-python">
+# rlhf_fsdp.py
+def apply_fsdp2_to_model(model, no_split_modules, device_mesh, mp_policy):
+    transformer = model.transformer
+    # ... recursive sharding ...
+    fully_shard(child, mesh=device_mesh, reshard_after_forward=True, mp_policy=mp_policy)
+    # Critical: Final block optimization
+    sharded_modules[-1].set_reshard_after_forward(False)
+</code></pre>
+<h4>Validation & Learning Rate Scheduling</h4>
+The original training script lacked a validation loop. So I made a 10% validation split (bucket-aware) and a ReduceLROnPlateau scheduler. This allows early stopping based on validation loss rather than fixed steps.
+<pre><code class="language-python">
+# rlhf_fsdp.py
+scheduler = ReduceLROnPlateau(
+    optimizer, mode='min', factor=0.1, patience=3, min_lr=1e-7
+)
+# Inside epoch loop
+validation_results = run_validation(val_dataloader, ...)
+scheduler.step(validation_results['avg_val_loss'])
+</code></pre>
+<h4>Bucketed Dataset & Dynamic Resolution</h4>
+To maximize throughput, I also added a bucketed dataset <a href="https://huggingface.co/datasets/shauray/sharegpt4o_encoded">BucketedShareGPTDataset</a> that groups images by aspect ratio. The training script handles dynamic batch sizing per bucket to maintain constant memory usage across varying resolutions (e.g., 1328x1328). Also I pre-encoded the dataset so I don't have to run the VAE encode at all times.
+<h3>Observations and Results</h3>
+<p>
+In this blog I kinda aimed to prove that  implementing Dynamic Renoise Sampling, and integrating latent-space reward gradients, it is technically feasible to train a few-step generators with complex, multi-objective loss functions. However, science is as much about understanding failure as it is about celebrating success. There was no light at the end of the tunnel this time. the training dynamics reveal critical insights into the stability limits of this approach or atleast my training run keeping in mind that I did not exactly have all the resources I would have wanted for the final run I used a 4xH200 instance from verda.
+<br><br>
+<img src="./assets/twinflow_qwen/samples.jpg" alt="Loss Overview" style="width:100%">
+<center><p style="font-size:10px">All the samples were generated using CFG:4.0 and steps:8 with hight and width set as 1328x1328</p></center>
+<h4> Training Dynamics Analysis</h4>
+The training run 10k steps on 4xH200 and exhibited a distinct "Cold Start Success, Late-Stage Divergence" pattern I cannot do a one to one comparission with vanilla TwinFlow due to insuficient compute so take all this with a grain of salt:
+<br><br>
+Effective Cold Start (Steps 0-3k-5k): The Dynamic Renoise Bias (starting at 4.0) did stabilize the early phase from what I can see. Loss decreased from 1.25 to 1.11 to 1.08, and Validation loss went from 1.052 to 1.047 confirming that biasing toward higher noise levels helps the student model learn global structure before finer details.
+<br>
+Divergence and Overfitting (Steps 5k-10k): As the renoise bias decayed to 1.0 (uniform sampling) and RL gradients became fully active, the validation loss began to climb steadily, reaching 1.12 by step 10k. Simultaneously, from the logs I observe massive spikes in Gradient Norm (greater than 1000), indicating that the combined RL and TwinFlow gradients became pretty unstable.
+<br>
+Sample Inconsistency: The final samples reflect this instability. While some prompts (e.g., the cow) generated coherent, high-fidelity images, others (e.g., The girl is sitting on steps in front of a building. She is relaxed and bored) suffered from severe texture artifacts or mode collapse. This suggests the RL weight (0.05) or the Reward Model sensitivity may be too aggressive for the current learning rate schedule, causing the generator to "chase" reward signals at the expense of distribution matching.
+<img src="./assets/twinflow_qwen/loss.png" alt="Loss Overview" style="width:100%">
+
+<h4>From what I understand</h4>
+RL Warmup is Critical, but Insufficient: While I added a 2k step warmup, the divergence at 5k steps suggests the transition from "pure distillation" to "RL-guided" needs to be more gradual. A sigmoidal ramp-up for the RL weight rather than a hard switch might prevent the gradient shocks observed in the logs.
+<br>
+Gradient Clipping Sensitivity: Despite setting max_grad_norm: 10.0, I observe norms exceeding 1000. This implies the reward gradients (computed via finite differences in latent space) are exploding. Future iterations should implement gradient clipping specifically on the RL loss term before combining it with the TwinFlow loss.
+<br>
+Validation-Driven Scheduling: The ReduceLROnPlateau scheduler detected the stagnation (epochs_without_improvement rose to 2), but the learning rate remained constant at 1e-4. For unstable RL-distillation runs, a more aggressive decay-on-spike policy is to be used I think.
+</p>
+<h4>Conclusion</h4>
+I'm not quite sure on what to conclude here, from what I see this should work but requires a lot of hyperparam tunes, and in hindsight I should have gone for 8xH200 to ensure more batches per bkwd pass and that would have given me more epochs and in turn more validation runs. Since relying on just how the loss moves on distillation runs is not a very good indicator of how the training goes i should have a different parameter helping the training run. Anyways all the configs and training scripts with augmented scripts for all the RL stuff lives here <a href="https://github.com/shauray8/TwinFlow-Qwen">shauray8/TwinFlow-Qwen</a>
+
+<hr>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script>
+    document.querySelectorAll('pre').forEach(function(pre) {
+        var wrapper = document.createElement('div');
+        wrapper.className = 'code-block';
+        var header = document.createElement('div');
+        header.className = 'code-header';
+        var lang = document.createElement('span');
+        lang.className = 'code-lang';
+        lang.textContent = 'python';
+        var btn = document.createElement('button');
+        btn.className = 'copy-btn';
+        btn.textContent = 'copy';
+        btn.addEventListener('click', function() {
+            var code = pre.querySelector('code');
+            navigator.clipboard.writeText(code ? code.innerText : pre.innerText).then(function() {
+                btn.textContent = 'copied!';
+                setTimeout(function() { btn.textContent = 'copy'; }, 1500);
+            });
+        });
+        header.appendChild(lang);
+        header.appendChild(btn);
+        wrapper.appendChild(header);
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(pre);
+    });
+</script>
+    </body>
+</html>
