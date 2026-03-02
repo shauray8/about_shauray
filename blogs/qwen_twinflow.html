@@ -16,26 +16,18 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
 
 </head>
-
-
     <body>
-
     <header class="site-header">
-
   <div class="wrap">
-
     <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
-    
 </header>
-
-
     <div class="page-content">
       <div class="wrap">
       <div class="post">
 
   <header class="post-header">
     <h1>Enhancing TwinFlow with Latent-Space RL and Dynamic Noise Scheduling for Qwen-Image-2512</h1>
-    <p class="meta">Feb 28, 2026</p>
+    <p class="meta">March 2, 2026</p>
   </header>
 
   <article class="post-content">
@@ -163,7 +155,7 @@
 </div>
 <h3>Abstract</h3>
 <p>
-Efficient inference in large flow models often demands a trade-off between sampling steps and generation quality. While <a href="https://github.com/inclusionAI/TwinFlow">TwinFlow</a> offers a discriminator-free pathway to 1-step generation via twin-trajectory velocity matching, standard distillation inherently caps student performance at the teacher's level. In this blog, I aim to detail a modified training framework for Qwen-Image-2512 that integrates TwinFlow with latent-space Reinforcement Learning and Dynamic Renoise Sampling much like <a href="https://github.com/vvvvvjdy/dmdr">DMD-R</a> and I was also inspired by this <a href="https://x.com/fal/status/2005690257979707496"> post</a> from FAL. Here I'll try to explore the mathematical foundations of these enhancements, scaling them using FSDP2, and the configuration used to achieve somewhat good 2-step generation atleast enough to prove that this could work.
+Efficient inference in large flow models often demands a trade-off between sampling steps and generation quality. While <a href="https://github.com/inclusionAI/TwinFlow">TwinFlow</a> offers a discriminator-free pathway to 1-step generation via twin-trajectory velocity matching, standard distillation inherently caps student performance at the teacher's level. In this blog, I aim to detail a modified training framework for Qwen-Image-2512 that integrates TwinFlow with latent-space Reinforcement Learning and Dynamic Renoise Sampling much like <a href="https://github.com/vvvvvjdy/dmdr">DMD-R</a> and I was also inspired by this <a href="https://x.com/fal/status/2005690257979707496"> post</a> from FAL. Here I'll try to explore the mathematical foundations of these enhancements, scaling them using FSDP2, and the configuration used to achieve somewhat good 2-step generation atleast enough to prove that this could work. The code lives here <a href="https://github.com/shauray8/TwinFlow-Qwen">shauray8/TwinFlow-Qwen</a>.
 </p>
 <h3>Introduction</h3>
 <p>
@@ -198,7 +190,7 @@ The distribution matching problem is recast as a velocity matching problem. Defi
 \[
 \Delta v(\mathbf{x}_t) := v_{\mathrm{fake}}(\mathbf{x}_t, -t) - v_{\mathrm{real}}(\mathbf{x}_t, t)
 \]
-The Rectification Loss encourages the model to straighten the generative trajectory, enabling few-step generation, In my implementation (twinflow.py), this is handled within the <code class="language-python">training_step</code> method, where <code class="language-python">prepare_inputs</code> constructs the twin time conditions (tt) and masks (sample_masks) to partition the batch between standard flow matching and twin-flow rectification. 
+The Rectification Loss encourages the model to straighten the generative trajectory, enabling few-step generation, In my implementation (<a href="https://github.com/shauray8/TwinFlow-Qwen/blob/main/src/methodes/twinflow/twinflow.py">twinflow.py</a>), this is handled within the <code class="language-python">training_step</code> method, where <code class="language-python">prepare_inputs</code> constructs the twin time conditions (tt) and masks (sample_masks) to partition the batch between standard flow matching and twin-flow rectification. 
 </p>
 
 <h3>Breaking the Ceiling: RL-Guided Distillation</h3>
@@ -291,14 +283,17 @@ scheduler.step(validation_results['avg_val_loss'])
 </code></pre>
 <h4>Bucketed Dataset & Dynamic Resolution</h4>
 To maximize throughput, I also added a bucketed dataset <a href="https://huggingface.co/datasets/shauray/sharegpt4o_encoded">BucketedShareGPTDataset</a> that groups images by aspect ratio. The training script handles dynamic batch sizing per bucket to maintain constant memory usage across varying resolutions (e.g., 1328x1328). Also I pre-encoded the dataset so I don't have to run the VAE encode at all times.
-<h3>Observations and Results</h3>
+<h3>Observations</h3>
 <p>
 In this blog I kinda aimed to prove that  implementing Dynamic Renoise Sampling, and integrating latent-space reward gradients, it is technically feasible to train a few-step generators with complex, multi-objective loss functions. However, science is as much about understanding failure as it is about celebrating success. There was no light at the end of the tunnel this time. the training dynamics reveal critical insights into the stability limits of this approach or atleast my training run keeping in mind that I did not exactly have all the resources I would have wanted for the final run I used a 4xH200 instance from verda.
 <br><br>
 <img src="./assets/twinflow_qwen/samples.jpg" alt="Loss Overview" style="width:100%">
 <center><p style="font-size:10px">All the samples were generated using CFG:4.0 and steps:8 with hight and width set as 1328x1328</p></center>
-<h4> Training Dynamics Analysis</h4>
-The training run 10k steps on 4xH200 and exhibited a distinct "Cold Start Success, Late-Stage Divergence" pattern I cannot do a one to one comparission with vanilla TwinFlow due to insuficient compute so take all this with a grain of salt:
+<h3>Results</h3>
+<img src="./assets/twinflow_qwen/comp.jpg" alt="Loss Overview" style="width:101%">
+This is a little comparison against 28 step Qwen-Image-2512 base checkpoint (on the left) and the 8 step distilled checkpoint, here the degradations are obvious still if someone wants to play with the checkpoint I've saved checkpoints from step 5000 upto 10k here <a href="https://huggingface.co/shauray/temp-ckpts-twinflow">shauray/temp-ckpts-twinflow</a> and maybe if you do, I would like to discuss what went wrong and how to improve the training run my first guess is it just needs more steps more data more batchs but I'll point out some stuff that I observed further down.
+<h3> Training Dynamics Analysis</h3>
+The training ran 10k steps on 4xH200 and exhibited a distinct "Cold Start Success, Late-Stage Divergence" pattern I cannot do a one to one comparission with vanilla TwinFlow due to insuficient compute so take all this with a grain of salt (sorry for no ablation studies):
 <br><br>
 Effective Cold Start (Steps 0-3k-5k): The Dynamic Renoise Bias (starting at 4.0) did stabilize the early phase from what I can see. Loss decreased from 1.25 to 1.11 to 1.08, and Validation loss went from 1.052 to 1.047 confirming that biasing toward higher noise levels helps the student model learn global structure before finer details.
 <br>
@@ -306,7 +301,8 @@ Divergence and Overfitting (Steps 5k-10k): As the renoise bias decayed to 1.0 (u
 <br>
 Sample Inconsistency: The final samples reflect this instability. While some prompts (e.g., the cow) generated coherent, high-fidelity images, others (e.g., The girl is sitting on steps in front of a building. She is relaxed and bored) suffered from severe texture artifacts or mode collapse. This suggests the RL weight (0.05) or the Reward Model sensitivity may be too aggressive for the current learning rate schedule, causing the generator to "chase" reward signals at the expense of distribution matching.
 <img src="./assets/twinflow_qwen/loss.png" alt="Loss Overview" style="width:100%">
-
+Also I did a very small run with no dynamic renoise, attaching a little loss graph from that run, for starters if I have to point out that the loss was much stable on enabling dynamic renoise and atleast until the RL kicked in the grad norm was also pretty stable with it.
+<img src="./assets/twinflow_qwen/no_renoise.png" alt="Loss Overview" style="width:100%">
 <h4>From what I understand</h4>
 RL Warmup is Critical, but Insufficient: While I added a 2k step warmup, the divergence at 5k steps suggests the transition from "pure distillation" to "RL-guided" needs to be more gradual. A sigmoidal ramp-up for the RL weight rather than a hard switch might prevent the gradient shocks observed in the logs.
 <br>
