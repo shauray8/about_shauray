@@ -27,7 +27,7 @@
 
   <header class="post-header">
     <h1>Enhancing TwinFlow with Latent-Space RL and Dynamic Noise Scheduling for Qwen-Image-2512</h1>
-    <p class="meta">March 2, 2026</p>
+    <p class="meta">March 3, 2026</p>
   </header>
 
   <article class="post-content">
@@ -285,7 +285,7 @@ scheduler.step(validation_results['avg_val_loss'])
 To maximize throughput, I also added a bucketed dataset <a href="https://huggingface.co/datasets/shauray/sharegpt4o_encoded">BucketedShareGPTDataset</a> that groups images by aspect ratio. The training script handles dynamic batch sizing per bucket to maintain constant memory usage across varying resolutions (e.g., 1328x1328). Also I pre-encoded the dataset so I don't have to run the VAE encode at all times.
 <h3>Observations</h3>
 <p>
-In this blog I kinda aimed to prove that  implementing Dynamic Renoise Sampling, and integrating latent-space reward gradients, it is technically feasible to train a few-step generators with complex, multi-objective loss functions. However, science is as much about understanding failure as it is about celebrating success. There was no light at the end of the tunnel this time. the training dynamics reveal critical insights into the stability limits of this approach or atleast my training run keeping in mind that I did not exactly have all the resources I would have wanted for the final run I used a 4xH200 instance from verda.
+In this blog I kinda aimed to prove that  implementing Dynamic Renoise Sampling, and integrating latent-space reward gradients, it is technically feasible to train a few-step generators with complex, multi-objective loss functions. However, science is as much about understanding failure as it is about celebrating success. There was no light at the end of the tunnel this time. the training dynamics reveal critical insights into the stability limits of this approach or atleast my training run keeping in mind that I did not exactly have all the resources I would have wanted for the final run I used a 4xH200 instance from verda for the final run.
 <br><br>
 <img src="./assets/twinflow_qwen/samples.jpg" alt="Loss Overview" style="width:100%">
 <center><p style="font-size:10px">All the samples were generated using CFG:4.0 and steps:8 with hight and width set as 1328x1328</p></center>
