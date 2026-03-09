@@ -14,6 +14,11 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="main.css">
 
+    <!-- Syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+
 </head>
 
 
@@ -116,45 +121,53 @@
       gap: 10px;
     }
     .gif-row img {
-        max-width: 50%; 
+        max-width: 50%;
         height: auto;
+    }
+    table {
+        border-collapse: collapse;
+        margin: 16px 0;
+        width: 100%;
+        font-size: 14px;
+    }
+    th, td {
+        border: 1px solid #ccc;
+        padding: 6px 12px;
+        text-align: left;
+    }
+    th {
+        background-color: #f6f8fa;
+        font-weight: bold;
     }
 </style>
 
 
 <div class="gif-container">
-    <img src="./assets/krea_realtime/showcase.gif" alt="ShowCase Video" loading="lazy">
-    <center><p style="font-size:10px">Ignore the GIF artifacts thoughout the blog</p></center>
+    <img src="./assets/qwen_optim/qwen_inference_optimizations.png" alt="optimization graph">
+    <center><p style="font-size:10px">Zoom in to see the inference times, it was a lot to condense already through the blog</p></center>
 </div>
 <p>
 
-This blog documents the optimization pipeline for the Qwen-Image-2512, specifically targeted at the NVIDIA B200 (sm_100). In this blog, I will try to dissect the naive implementation of the Qwen-Image pipeline, identify compute and memory bound regions via profiling, and apply systematic optimizations ranging from graph compilation (torch.compile) to custom kernel integration. Mostly focusing on high-impact areas: the Dual-Stream Diffusion Transformer (DiT) backbone, 3D Rotary Positional Embeddings (RoPE), and Joint Attention mechanisms. At every step of the optimizations I will try to attach an image for benchmark and tokens-per-sec or the inference time either at 50 steps or at 28 steps (standard for qwen-image-2512).
+This blog documents the optimization pipeline for Qwen-Image-2512, specifically targeted towards B200. In this blog, I will try to dissect the naive implementation of the Qwen-Image pipeline, identify compute and memory bound regions via profiling, and apply optimizations ranging from graph compilation to custom kernel integration. At every step of the optimizations I will try to attach an image for benchmark and tokens-per-sec or the inference time either at 50 steps or at 28 steps (standard for qwen-image-2512).
 </p>
 
 <h3>Model Architecture </h3>
 <p>
-The Qwen-Image-2512 model follows a Flow Matching Diffusion Transformer (DiT) paradigm, The core generative engine is the QwenImageTransformer2DModel, a 60-layer dual-stream transformer that processes image latents and text conditions jointly. Understanding the computational graph of this backbone is prerequisite to any optimization strategy. And interestingly enough the Edit family of models and the other Image models for qwen share the same architecture.
+The Qwen-Image-2512 model follows a Flow Matching Diffusion Transformer paradigm, It's essentially a 60-layer dual-stream transformer that processes image latents and text conditions jointly. Understanding the computational graph of this backbone is prerequisite to any optimization strategy. And interestingly enough the Edit family of models and the other Image models for qwen share the same architecture.
 <br>
-<h4>1. Backbone Specifications</h4>
-The transformer operates on patchified latent representations. Mainly 60 QwenImageTransformerBlock instances, 2×2 spatial compression in the latent space, 8X compression on VAE, further modified by latent packing to an effective stride of 16×16 pixels per latent token.
-<h4>2. Joint Attention Mechanism</h4>
+<h4>Backbone Specifications</h4>
+The transformer operates on patchified latent representations. Mainly 60 <code>QwenImageTransformerBlock</code> instances, 2×2 spatial compression in the latent space, 8X compression on VAE, further modified by latent packing to a stride of 16×16 pixels per latent token.
+<h4>Joint Attention Mechanism</h4>
 Unlike standard cross-attention where image queries attend to text keys/values, Qwen-Image employs Joint Attention. Text and image tokens are concatenated along the sequence dimension before QKV projection.
 \[
   Q_{\mathrm{joint}} = \mathrm{Concat}(Q_{\mathrm{text}}, 
   Q_{\mathrm{img}}),\quad K_{\mathrm{joint}} = \mathrm{Concat}(K_{\mathrm{text}}, K_{\mathrm{img}}),\quad V_{\mathrm{joint}} = \mathrm{Concat}(V_{\mathrm{text}}, V_{\mathrm{img}})
 \]
-<b>Optimization Implication</b>: This structure creates a single large attention matrix of shape \((L_{\mathrm{text}} + L_{\mathrm{img}}) \times (L_{\mathrm{text}} + L_{\mathrm{img}})\) On B200, this favors Flash Attention variants (flash_attn_varlen_func) to avoid materializing the \(O(N^2)\) attention matrix in SRAM. We will come to this later on!
-<h4>3. 3D Rotary Positional Embeddings (RoPE)</h4>
-Positional information is injected via 3D RoPE, accounting for Frame, Height, and Width dimensions. The QwenEmbedRope module pre-comutes frequency tensors based on axes dimensions (16, 56, 56). The rotation is applied to query and key vectors in the complex domain. Now to ensure compatibility with torch.compile, there are some changes that I intend to do, the frequency buffers (pos_freqs_real, pos_freqs_imag) are registered as non-persistent buffers and reconstructed as complex tensors during the forward pass. This avoids graph breaks caused by dynamic tensor construction. It cannot just be me annoyed by constant graph breaks on RoPE!
-<h4>4. Conditioning and Normalization</h4>
-The model utilizes AdaLN (Adaptive Layer Normalization) conditioned on timestep and guidance embeddings.
-<ul>
-  <li>The model utilizes AdaLN (Adaptive Layer Normalization) conditioned on timestep and guidance embeddings.</li>
-  <li>Modulation: Each transformer block splits modulation parameters into shift, scale, and gate for both norm1 and norm2 layers.</li>
-  <li>Guidance: Supports classifier-free guidance (true_cfg_scale) via conditional/unconditional forward passes</li>
-</ul>
-<h4>5. Latent Packing</h4>
-The pipeline (pipeline.py) employs latent packing to reduce sequence length. Latents of shape \((B,C,H,W)\) are rearranged into \((B,H/2 \times W/2, C \times 4)\). This reduces the spatial sequence length by a factor of 4 while increasing the channel dimension, shifting the compute balance from attention (sequence-bound) to MLP (channel-bound).
+This structure creates a single large attention matrix of shape \((L_{\mathrm{text}} + L_{\mathrm{img}}) \times (L_{\mathrm{text}} + L_{\mathrm{img}})\) On B200, this favors Flash Attention variants (<code>flash_attn_varlen_func</code>) to avoid materializing the \(O(N^2)\) attention matrix in SRAM. We will come to this later on!
+<h4>3D Rotary Positional Embeddings (RoPE)</h4>
+Positional information is injected via 3D RoPE, accounting for Frame, Height, and Width dimensions. The <code>QwenEmbedRope</code> module pre-comutes frequency tensors based on axes dimensions (16, 56, 56). The rotation is applied to query and key vectors in the complex domain. Now to ensure compatibility with <code>torch.compile</code>, there are some changes that I intend to do, the frequency buffers (<code>pos_freqs_real</code>, <code>pos_freqs_imag</code>) are now registered as non-persistent buffers and reconstructed as complex tensors during the forward pass. This avoids graph breaks caused by dynamic tensor construction. It cannot just be me annoyed by constant graph breaks on RoPE!
+<h4>Latent Packing</h4>
+The pipeline employs latent packing to reduce sequence length. Latents of shape \((B,C,H,W)\) are rearranged into \((B,H/2 \times W/2, C \times 4)\). This reduces the spatial sequence length by a factor of 4 while increasing the channel dimension, shifting the compute balance from attention (sequence-bound) to MLP (channel-bound).
 <br>
 Okay I think this is enough to understand the nature of the models architecture and move forwards towards reading some profiles It makes sense to understand the arch since its used accross the QWEN series of models.
 </p>
@@ -162,45 +175,19 @@ Okay I think this is enough to understand the nature of the models architecture 
 <h3>Flash Attention 4 Integration</h3>
 <p>
 
-The default Diffusers implementation typically relies on F.scaled_dot_product_attention, which dispatches to Flash Attention 2 (FA2) on Ampere/Blackwell you can use there AttnFN but that only supports FA3 as far as I know. this leaves significant performance on the table. FA4 introduces kernel primitives optimized for Blackwell's new Tensor Core instructions and enhanced memory subsystem and to be fair I cannot get my kernel perf to be Tri Dao good probably ever so I'll borrow FA4 cuteDSL kernels from Flash Attn.
-<h4>1. Kernel Migration</h4>
-Replaced the default attention dispatcher with a direct invocation of flash_attn_varlen_func (defined in interface.py), specifically targeting the FlashAttentionForwardSm100 kernel class. This bypasses the generic SDPA overhead and ensures the scheduler utilizes SM100-specific tile sizes and pipeline stages.
+The default Diffusers implementation typically relies on <code>F.scaled_dot_product_attention</code>, which dispatches to Flash Attention 2 (FA2) on Ampere/Ada you can use there AttnFN but that only supports FA3 as far as I know. this leaves significant performance on the table. FA4 introduces kernel primitives optimized for Blackwell's new Tensor Core instructions and enhanced memory subsystem and to be fair I cannot get my kernel perf to be Tri Dao good probably ever so I'll borrow FA4 cuteDSL kernels from Flash Attn.
+<h4>Kernel Migration</h4>
+Replaced the default attention dispatcher with a direct invocation of <code>flash_attn_varlen_func</code>. This bypasses the generic SDPA overhead and ensures the scheduler utilizes SM100-specific tile sizes and pipeline stages.
 <br>
-Crucially, Qwen-Image employs bidirectional (non-causal) attention within the DiT blocks. Many FA implementations default to causal masking optimized for LLMs. Explicitly setting causal=False allows the kernel to skip upper-triangular masking logic and utilize full N×N tile throughput.
-<h4>2. Performance Impact</h4>
-The migration from FA2 to FA4 yields immediate latency reductions without graph compilation. Notably, my initial attempts to manually tune num_splits and block_sizes resulted in a 4.4% regression suggesting the FA4 default heuristics for SM100 are already highly optimized for standard DiT workloads.
+Crucially, Qwen-Image employs bidirectional (non-causal) attention within the DiT blocks. Many FA implementations default to causal masking optimized for LLMs. Explicitly setting <code>causal=False</code> allows the kernel to skip upper-triangular masking logic and utilize full N×N tile throughput.
+<h4>Performance Impact</h4>
+The migration from FA2 to FA4 yields immediate latency reductions without graph compilation. Notably, my initial attempts to manually tune <code>num_splits</code> and <code>block_sizes</code> resulted in a 4.4% regression suggesting the FA4 default heuristics for SM100 are already highly optimized for standard DiT workloads.
 <br>
-Root Cause Analysis for that:
+Root Cause for that would be:
 <ul>
-  <li>Split Overhead is greater than Parallelization Benefit: For sequence lengths ~4,314 tokens (Qwen-Image), splitting across SMs introduces synchronization overhead that exceeds compute gains.</li>
-  <li>GQA Not Beneficial: The model uses 24 attention heads with standard MHA (not GQA), so pack_gqa=True provides no benefit.</li>
-  <li>Default Heuristics Optimal: FA4's internal dispatch logic already selects optimal parameters for SM100 workloads.</li>
+  <li>For sequence lengths ~4,314 tokens, splitting across SMs introduces synchronization overhead that exceeds compute gains.</li>
+  <li>The model uses 24 attention heads with standard MHA (not GQA), so <code>pack_gqa=True</code> provides no benefit.</li>
 </ul>
-
-<style>
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 20px 0;
-        font-family: Arial, sans-serif;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    th, td {
-        padding: 12px 15px;
-        text-align: left;
-        border-bottom: 1px solid #ddd;
-    }
-    th {
-        background-color: #f2f2f2;
-        font-weight: bold;
-    }
-    tr:nth-child(even) {
-        background-color: #f9f9f9;
-    }
-    tr:hover {
-        background-color: #f1f1f1;
-    }
-</style>
 
 <table>
     <thead>
@@ -216,13 +203,13 @@ Root Cause Analysis for that:
             <td>Vanilla (FA2)</td>
             <td>21.004s</td>
             <td>1.00x</td>
-            <td>Default scaled_dot_product_attention</td>
+            <td>Default <code>scaled_dot_product_attention</code></td>
         </tr>
         <tr>
             <td>FA4 (Default)</td>
             <td>13.466s</td>
             <td>1.56x</td>
-            <td>FlashAttentionForwardSm100</td>
+            <td><code>FlashAttentionForwardSm100</code></td>
         </tr>
         <tr>
             <td>FA4 (Bidir Tuned)</td>
@@ -233,35 +220,20 @@ Root Cause Analysis for that:
     </tbody>
 </table>
 
-
-<h4>3. Implementation Detail</h4>
-The integration relies on the flash_attn_varlen_func from interface.py, which handles variable sequence lengths (due to text padding) without costly memory concatenation.
-
-<pre><code>
-# interface.py: SM100 Specific Dispatch
-if compute_capability in [10, 11]:
-    fa_fwd = FlashAttentionForwardSm100(
-        head_dim, head_dim_v, qhead_per_kvhead,
-        is_causal=False,  # Critical for DiT
-        is_persistent=True, # Optimizes SRAM usage on B200
-        ...
-    )
-</code></pre>
 for more details on Flash Attention 4 refer to this blog here: <a href=""https://shauray8.github.io/about_shauray/blogs/gantt_chart.html>FlashAttention4 Gantt Chart</a>
 
 </p>
 <h3>Batched CFG and Quack RMSNorm</h3>
 <p>
 
-With Flash Attention 4 establishing the attention backbone, we turn to two critical optimization vectors: eliminating redundant classifier-free guidance computations and replacing normalization layer bottlenecks with custom kernels. 
+With Flash Attention 4 establishing the attention backbone, we turn to two critical optimization vectors: eliminating redundant classifier-free guidance computations and replacing normalization layer bottlenecks with custom kernels (i.e. from quack). 
 <h4>The CFG Overhead Problem</h4>
-Classifier-Free Guidance (CFG) is essential for high-quality text-to-image generation. The guidance equation scales the difference between conditional and unconditional predictions:
+The guidance equation scales the difference between conditional and unconditional predictions:
 \[
   \epsilon_{\mathrm{cfg}} = \epsilon_{\mathrm{uncond}} + w \cdot (\epsilon_{\mathrm{cond}} - \epsilon_{\mathrm{uncond}})
 \]
-Where \(w\) is the guidance scale (true_cfg_scale=4.0 in our setup). The naive implementation requires two separate forward passes per denoising step:
-<pre><code>
-# Naive CFG (2 forward passes per step)
+Where \(w\) is the guidance scale. The naive implementation requires two separate forward passes per denoising step:
+<pre><code class="language-python">
 noise_pred_cond = transformer(latents, prompt_embeds)      # Pass 1
 noise_pred_uncond = transformer(latents, neg_prompt_embeds)  # Pass 2
 noise_pred = noise_pred_uncond + w * (noise_pred_cond - noise_pred_uncond)
@@ -269,47 +241,20 @@ noise_pred = noise_pred_uncond + w * (noise_pred_cond - noise_pred_uncond)
 For Qwen-Image-2512 with 28 denoising steps, this results in 56 total transformer forward passes. Given that each forward pass through 60 transformer layers takes ~130ms, CFG alone accounts for ~7.3 seconds of inference time. Inital profiles identified this as the single largest bottleneck with 50% speedup potential. The transformer architecture is identical for both passes only the text embeddings differ.
 
 <h4>Batched CFG Implementation</h4>
-We concatenate conditional and unconditional inputs along the batch dimension, reducing 56 forward passes to 28:
-<pre><code>
-# Batched CFG (1 forward pass per step)
+So merge them both - conditional and unconditional inputs along the batch dimension, reducing 56 forward passes to 28:
+<pre><code class="language-python">
 batched_latents = torch.cat([latents, latents], dim=0)           # [2B, seq_img, dim]
 batched_embeds = torch.cat([prompt_embeds, neg_prompt_embeds], dim=0)  # [2B, seq_txt, dim]
 batched_noise_pred = transformer(batched_latents, batched_embeds)  # Single pass
 noise_pred_cond, noise_pred_uncond = batched_noise_pred.chunk(2, dim=0)
 </code></pre>
 <ul>
-  <li>Embedding Padding: Text sequences often vary in length. We pad the shorter sequence (typically unconditional empty prompt) to match the conditional sequence length before concatenation.</li>
-  <li>Attention Mask Handling: The encoder_hidden_states_mask is similarly concatenated and padded to prevent attention to padding tokens.</li>
-  <li>Modulation Parameters: For models with zero_cond_t=True, timestep embeddings are also batched with conditional timesteps and zeroed unconditional timesteps.</li>
-  <li>Memory Considerations: Batch size effectively doubles \((B → 2B)\), increasing activation memory by ~2GB. On B200's 180GB HBM3, this is negligible.</li>
+  <li>Text sequences often vary in length. So I pad the shorter sequence (typically unconditional empty prompt) to match the conditional sequence length before concatenation.</li>
+  <li>The <code>encoder_hidden_states_mask</code> is similarly concatenated and padded to prevent attention to padding tokens.</li>
+  <li>For models with <code>zero_cond_t=True</code>, timestep embeddings are also batched with conditional timesteps and zeroed unconditional timesteps.</li>
 </ul>
 
 <h4>Performance Analysis</h4>
-
-<style>
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 20px 0;
-        font-family: Arial, sans-serif;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    th, td {
-        padding: 12px 15px;
-        text-align: left;
-        border-bottom: 1px solid #ddd;
-    }
-    th {
-        background-color: #f2f2f2;
-        font-weight: bold;
-    }
-    tr:nth-child(even) {
-        background-color: #f9f9f9;
-    }
-    tr:hover {
-        background-color: #f1f1f1;
-    }
-</style>
 
 <table>
     <thead>
@@ -349,151 +294,23 @@ noise_pred_cond, noise_pred_uncond = batched_noise_pred.chunk(2, dim=0)
 </table>
 Why Not 2x Speedup? Several factors limit the theoretical 2x gain:
 <ul>
-  <li>Memory Bandwidth Saturation: Doubling batch size increases memory bandwidth pressure. The B200's 8TB/s bandwidth becomes the limiting factor rather than compute.</li>
-  <li>Padding Overhead: Variable sequence lengths require padding, introducing ~3% computational waste.</li>
-  <li>Kernel Launch Overhead: While reduced by 50%, the remaining launches still incur scheduling latency.</li>
-  <li>CUDA Kernel Caching: The baseline already benefited from cached kernels on subsequent runs, reducing the relative improvement.</li>
+  <li>Doubling batch size increases memory bandwidth pressure. The bandwidth becomes the limiting factor rather than compute.</li>
+  <li>Variable sequence lengths require padding, introducing ~3% computational waste.</li>
+  <li>The baseline already benefited from cached kernels on subsequent runs, reducing the relative improvement.</li>
 </ul>
 
-Mathematical Model: The actual speedup
-
-\[
-
-S = \frac{T_{\mathrm{batched}}}{T_{\mathrm{naive}}} = \frac{T_{\mathrm{compute}} \cdot (1 + \alpha) + T_{\mathrm{launch}}}{2 \cdot (T_{\mathrm{compute}} + T_{\mathrm{launch}})}
-
-\]
-Where \(\alpha \approx 0.08\)  represents the memory bandwidth overhead from doubled batch size. For our workload \((T_{\mathrm{compute}} \gg T_{\mathrm{launch}})\) , this yields \(S \approx 1.09x\), matching empirical results.
-
-<h4>Quack RMSNorm: The Normalization Bottleneck</h4>
-Qwen-Image-2512 contains 482 normalization layers across its 60 transformer blocks, Each normalization layer executes 28 steps × 56 CFG passes = 1,568 times per inference, resulting in 755,616 total norm operations. PyTorch Overhead: Standard torch.nn.RMSNorm or F.rms_norm incurs significant overhead:
+<h4>Quack RMSNorm</h4>
+Qwen-Image-2512 contains 482 normalization layers across its 60 transformer blocks, Each normalization layer executes 28 steps × 56 CFG passes = 1,568 times per inference, resulting in 755,616 total norm operations. Standard <code>torch.nn.RMSNorm</code> or <code>F.rms_norm</code> incurs significant overhead:
 
 <ul>
-  <li>Kernel Launch Latency: Each norm call requires a separate CUDA kernel launch (~5-10μs)
+  <li>Each norm call requires a separate CUDA kernel launch (~5-10μs)
 </li>
-<li>Memory Round-Trips: Intermediate results written to global memory
+<li>Intermediate results written to global memory
 </li>
-<li>Suboptimal Tiling: Generic kernels don't exploit B200's specific memory hierarchy
+<li>Generic kernels don't exploit B200's specific memory hierarchy
 </li>
-</ul>
-<h4>Quack RMSNorm Architecture</h4>
-Quack RMSNorm (rmsnorm.py) is a CuTe DSL-based custom kernel optimized for Hopper/Blackwell architectures. Key architectural features:
-<h4>Cluster-Based Parallelization:</h4>
-<pre><code>
-def _set_cluster_n(self):
-    N = self.N  # Hidden dimension
-    if N <= 16 * 1024:
-        self.cluster_n = 1
-    elif N <= 32 * 1024:
-        self.cluster_n = 2
-    elif N <= 64 * 1024:
-        self.cluster_n = 4
-    else:
-        self.cluster_n = 8
-</code></pre>
-For Qwen-Image's d = 3072, cluster_n=1 (single CTA per norm). Larger models benefit from multi-CTA parallelization across SM clusters.
-<h4>Shared Memory Optimization:</h4>
-The kernel uses a two-stage pipeline with shared memory buffering:
-<pre><code>
-smem = cutlass.utils.SmemAllocator()
-sX = smem.allocate_tensor(mX.element_type, smem_layout, byte_alignment=16)
-reduction_buffer, mbar_ptr = self._allocate_reduction_buffer_and_mbar(smem, tv_layout)
-</code></pre>
-
-<ul>
-  <li>Stage 1: Load input from global memory to shared memory
-</li>
-<li>Stage 2: Compute reduction (sum of squares) in shared memory
-</li>
-<li>Stage 3: Apply normalization and write output
-</li>
-</ul>
-
-<h4>Vectorized Memory Access:</h4>
-<pre><code>
-vecsize = math.gcd(self.N, 128 // largest_dtype_width)
-tiled_copy, tiler_mn, threads_per_row = self._get_tiled_copy(vecsize=vecsize)
-</code></pre>
-
-For d=3072 with BF16 (2 bytes), vecsize=16, enabling 16-element vector loads/stores per thread.
-<h4>FP32 Accumulation with BF16 I/O:</h4>
-<pre><code>
-x = tXrX.load().to(cute.Float32)  # Convert to FP32 for computation
-sum_sq_x = row_reduce(x * x, ...)  # FP32 reduction
-rstd = cute.math.rsqrt(sum_sq_x / shape[1] + eps, fastmath=True)
-x_hat = x * rstd
-y = x_hat * tXrW.load().to(cute.Float32)  # FP32 weight multiplication
-tXrO.store(y.to(tXrO.element_type))  # Convert back to BF16
-</code></pre>
-
-This ensures numerical stability while maintaining memory bandwidth efficiency.
-<h4>Persistent Kernel Design:</h4>
-For larger sequence lengths, the kernel can operate in persistent mode, where CTAs remain resident across multiple norm operations, eliminating kernel launch overhead entirely.
-
-<h4>Integration via Dynamic Patching</h4>
-We replace PyTorch norms at runtime using patch_rms_trans.py:
-<pre><code>
-class QuackRMSNormWrapper(nn.Module):
-    def __init__(self, dim, eps=1e-6, elementwise_affine=True, ...):
-        super().__init__()
-        self.eps = eps
-        self.dim = dim
-        if elementwise_affine:
-            self.weight = nn.Parameter(torch.ones(dim, dtype=torch.float32))
-
-    def forward(self, x):
-        orig_shape = x.shape
-        x_2d = x.reshape(-1, self.dim)  # Flatten to (M, N)
-        weight = self.weight.float() if self.weight is not None else None
-        out = rmsnorm(x_2d, weight=weight, eps=self.eps)  # Quack kernel
-        return out.reshape(orig_shape)
-
-def replace_norms_with_optimized(model, verbose=True):
-    for name, module in list(model.named_children()):
-        is_rms_norm = type(module).__name__ == 'RMSNorm' or isinstance(module, RMSNorm)
-        is_layer_norm = isinstance(module, nn.LayerNorm)
-
-        if is_rms_norm or is_layer_norm:
-            dim = module.weight.shape[0] if hasattr(module, 'weight') else module.normalized_shape[0]
-            new_module = QuackRMSNormWrapper(dim, eps=getattr(module, 'eps', 1e-6))
-            new_module.weight.copy_(module.weight.data.float())
-            setattr(model, name, new_module)
-</code></pre>
-Key Design Decisions:
-
-<ul>
-  <li>Float32 Weights: Quack kernels expect FP32 weights for numerical precision, even with BF16 activations.
-  </li>
-  <li>Shape Flattening: The kernel operates on 2D tensors (M,N) We reshape inputs before and restore shapes after.</li>
-  <li>In-Place Replacement: We modify the model tree directly, avoiding graph breaks during torch.compile.
-  </li>
-  <li>LayerNorm Compatibility: The same kernel supports both RMSNorm and LayerNorm via is_layernorm flag.</li>
 </ul>
 <h4>Performance Breakdown</h4>
-
-<style>
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 20px 0;
-        font-family: Arial, sans-serif;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    th, td {
-        padding: 12px 15px;
-        text-align: left;
-        border-bottom: 1px solid #ddd;
-    }
-    th {
-        background-color: #f2f2f2;
-        font-weight: bold;
-    }
-    tr:nth-child(even) {
-        background-color: #f9f9f9;
-    }
-    tr:hover {
-        background-color: #f1f1f1;
-    }
-</style>
 
 <table>
     <thead>
@@ -538,7 +355,7 @@ Key Design Decisions:
     </tbody>
 </table>
 Detailed Timing Analysis:
-<pre><code>
+<pre><code class="language-plaintext">
 Per-Operation Breakdown (28 steps, batched CFG):
 ├── Transformer Forward:  5,100ms → 2,900ms (1.76x)
 ├── RMSNorm Operations:   1,100ms →   400ms (2.75x) ← Quack impact
@@ -547,55 +364,22 @@ Per-Operation Breakdown (28 steps, batched CFG):
 ├── VAE Decode:             700ms →   500ms (1.40x)
 └── Scheduler/Python:       400ms →   230ms (1.74x)
 </code></pre>
-Why 2.8x Per-Norm Speedup?
+Why almost 2.8x Per-Norm Speedup?
 <ul>
-  <li>Reduced Kernel Launch Overhead: CuTe kernels have ~50% lower launch latency than PyTorch's generic operators.
+  <li>CuTe kernels have ~50% lower launch latency than PyTorch's generic operators.
 </li>
-<li>Optimal Tile Sizes: Quack uses 128×128 tiles optimized for B200's L2 cache, vs PyTorch's conservative defaults.</li>
-<li>Fused Operations: Weight multiplication and epsilon addition are fused into the normalization kernel.
+<li>Quack uses 128×128 tiles optimized for B200's L2 cache, vs PyTorch's conservative defaults.</li>
+<li>Weight multiplication and epsilon addition are fused into the normalization kernel.
 </li>
-<li>Register Pressure Optimization: Quack carefully manages register usage to avoid spilling to local memory.
+<li>Quack manages register usage to avoid spilling to local memory.
 </li>
 </ul>
 Memory Bandwidth Utilization:
-\[
-\mathrm{Bandwidth\ Efficiency} = \frac{\mathrm{Peak\ Bandwidth} \times \mathrm{Time}}{\mathrm{Useful\ Data\ Transferred}}
-\]
 <ul>
   <li>PyTorch: ~60% (suboptimal memory coalescing)</li>
   <li>Quack: ~85% (vectorized loads, shared memory buffering)</li>
 </ul>
-For B200's 8TB/s peak bandwidth, this translates to:
-<ul>
-  <li>PyTorch: 4.8 TB/s effective</li>
-  <li>Quack: 6.8 TB/s effective</li>
-</ul>
 <h4>Combined Impact: CFG + RMSNorm</h4>
-
-<style>
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 20px 0;
-        font-family: Arial, sans-serif;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    th, td {
-        padding: 12px 15px;
-        text-align: left;
-        border-bottom: 1px solid #ddd;
-    }
-    th {
-        background-color: #f2f2f2;
-        font-weight: bold;
-    }
-    tr:nth-child(even) {
-        background-color: #f9f9f9;
-    }
-    tr:hover {
-        background-color: #f1f1f1;
-    }
-</style>
 
 <table>
     <thead>
@@ -627,12 +411,11 @@ For B200's 8TB/s peak bandwidth, this translates to:
         </tr>
     </tbody>
 </table>
-Synergistic Effects:
-
+Effects:
 <ul>
-  <li>Reduced Launch Overhead: Batched CFG halves the number of norm executions (56 → 28 forward passes), amplifying Quack's per-norm gains.</li>
-  <li>Memory Locality: Larger batch sizes improve memory coalescing for norm kernels.</li>
-  <li>Compilation Friendly: Both optimizations are torch.compile-compatible, enabling further graph-level fusion.</li>
+  <li>Batched CFG halves the number of norm executions (56 to 28 forward passes), amplifying Quack's per-norm gains.</li>
+  <li>Larger batch sizes improve memory coalescing for norm kernels.</li>
+  <li>Both optimizations are compile-compatible, enabling further graph-level fusion.</li>
 </ul>
 Total Operations Saved:
 \[
@@ -640,282 +423,1395 @@ Total Operations Saved:
 \]
 At ~1.8μs saved per call, this accounts for ~680ms of the 1,193ms total improvement.
 <h4>Direct MLP Replacement (Incompatible)</h4>
-I did attempt to replace FeedForward layers with quack.mlp kernels but the issues were:
+I did attempt to replace FeedForward layers with <code>quack.mlp</code> kernels but the issues were:
 <ul>
   <li>Weight copy complications between PyTorch and CuTe formats</li>
   <li>Activation function (GELU-approximate) not supported in Quack MLP</li>
-  <li>torch.compile already fuses MLPs effectively</li>
+  <li>compile already fuses MLPs effectively</li>
 </ul>
 
 </p>
-<h3>Exploring custom attention masks</h3>
+<h3>FP8 and MXFP8</h3>
 <p>
-With the custom linear layers in place, I turned my attention (heh) to another key component of Krea-Realtime the attention masks used in its transformer architecture. Since this is an autoregressive video model, masks are crucial for controlling what parts of the input sequence the model can "see" during generation. They enforce causality to prevent future information from leaking into past predictions, which is essential for stable, coherent video outputs. But Krea-Realtime goes beyond a simple causal mask it uses a "block-causal" mask to handle long form generation while mitigating issues like error accumulation and distribution shifts.
+Two blog posts kicked this section off. Cursor's writeup on achieving 3.5x speedup in MoE training with MXFP8 blockscaled GEMMs, and fal.ai's detailed teardown of building a 6+ TB/s MXFP8 quantization kernel on Blackwell using CuTeDSL. The B200 has native <code>tcgen05.mma.block_scale</code> tensor cores with a 4.5 PFLOPS FP8 ceiling. The hardware is obviously there. What follows is everything that happened when I tried to use it.
+
+<h4>Rowwise FP8 - The Path That Actually Worked (Eventually)</h4>
+The first attempt used PyTorch's native <code>torch._scaled_mm</code> with the straightforward approach:
+<pre><code>
+def forward(self, x):
+   x_fp8 = x.to(torch.float8_e4m3fn)
+   scale_a = torch.tensor([1.0], device='cuda')
+   scale_b = torch.tensor([1.0], device='cuda')
+   return torch._scaled_mm(x_fp8, self.W_fp8.T, scale_a, scale_b,out_dtype=torch.bfloat16)
+</code></pre>
+This ran at 0.72x BF16 speed. The GEMM itself isn't the issue the two <code>torch.tensor</code> calls on every forward pass are. Each one hits
+the CUDA memory allocator, goes through Python - C++ dispatch, and stalls the stream. Across 64 linear layers and 28 diffusion steps you're doing 3,584 scalar tensor allocations per inference. The overhead was measured at 19x relative to the scale operation itself.
 <br><br>
-From the model's design, Krea-Realtime employs a block-causal mask during both pretraining and inference, particularly in the causal ODE pretraining phase and KV cache recomputation. The sequence is divided into blocks, where each block consists of multiple frames (e.g 3 frames per block). Within a block, attention is fully bidirectional all tokens (representing latent frames) can attend to each other freely. Between blocks, it's strictly causal later blocks can only attend to earlier ones, not vice versa. This allows for:
+The fix would be to pre-allocate and keep them as module buffers:
+<pre><code>
+class LinearFP8(nn.Module):
+  def __init__(self, original_linear):
+    super().__init__()
+    self.register_buffer('weight_fp8',
+                         original_linear.weight.to(torch.float8_e4m3fn))
+    self.register_buffer('scale', torch.tensor([1.0], device='cuda'))
+
+  def forward(self, x):
+    x_fp8 = x.to(torch.float8_e4m3fn)
+    return torch._scaled_mm(x_fp8, self.weight_fp8.T,
+                            self.scale, self.scale,
+                            out_dtype=torch.bfloat16)
+</code></pre>
+With this, the isolated FFN benchmark (seq_len=5500, hidden=3072, ffn=8192) showed 1.279x speedup (from 0.419ms to 0.328ms). An earlier benchmark that showed 1.456x was using 2D inputs [B*S, H] directly. The actual model operates on 3D tensors [B, S, H] and requires a <code>view()</code> before quantization. That reshape affects stride layout in a way the quantization kernel handles differently, and the honest number is 1.279x.
+
+<h4>Microbenchmark vs Pipeline Divergence</h4>
+With 1.279x on FFN, the full pipeline test came back like this:
+
+<table>
+    <thead>
+        <tr>
+            <th>Method</th>
+            <th>Total Time</th>
+            <th>Image</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>BF16</td>
+            <td>5.208s</td>
+            <td>1.4MB, valid</td>
+        </tr>
+        <tr>
+            <td>FP8 (optimized)</td>
+            <td>5.543s</td>
+            <td>3KB, NaN</td>
+        </tr>
+    </tbody>
+</table>
+1.064x slower, and the output was corrupted. Two separate failures, different root causes. The math is straightforward once you account for where compute actually goes - Flash Attention is ~50% of the transformer, VAE decode is ~15%, the FFN layers FP8 actually touches are only ~30%. Even ignoring overhead, Amdahl limits the maximum gain from optimizing 30% of the graph to something modest. But the conversion overhead changes things further <code>.to(torch.float8_e4m3fn)</code> on a [5500, 3072] activation costs approximately 0.15ms. Across 64 linear layers and 28 steps: 
+<pre><code class="language-plaintext">
+Cast overhead:  64 × 28 × 0.15ms ≈ 269ms
+GEMM savings:  estimated ~180ms
+Net:           +89ms  (slower)
+</code></pre>
+The overhead-to-savings ratio gets worse as the workload becomes less GEMM-dominated. In Cursor's MoE training setup, FFN is 80%+ of compute and the conversion cost is amortized over thousands of gradient steps. For single-image diffusion inference, it's the dominant term.
+<br><br>
+FP8 E4M3 has ~1% relative error per quantization event. A single-pass model is fine with that. A diffusion model running 28 denoising steps is not each step builds directly on the previous. The error compounds. By step 28 we had NaN values in the output.
+<h4>What Actually Fixes It: compile Fusion</h4>
+Testing rowwise FP8 under <code>torch.compile</code> told a different story:
+
+<table>
+    <thead>
+        <tr>
+            <th>Approach</th>
+            <th>inference time</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Rowwise FP8 + compile</td>
+            <td>3.744s</td>
+        </tr>
+        <tr>
+            <td>BF16 + compile</td>
+            <td>4.130s</td>
+        </tr>
+        <tr>
+            <td>Rowwise FP8, no compile</td>
+            <td>~5.5s</td>
+        </tr>
+    </tbody>
+</table>
+FP8 with compile beats BF16 with compile. <code>torch._scaled_mm</code> is a first-class PyTorch op. <code>torch.compile</code> knows its semantics. The entire transformer quantization cast, GEMM, surrounding normalization, modulation fuses into a single
+  compiled graph. The BF16 to FP8 cast that was killing us in eager mode becomes a Triton kernel epilogue fused with the preceding normalization and profiles confirmed it:
+
+<table>
+    <thead>
+        <tr>
+            <th>Kernel</th>
+            <th>Total (4 steps)</th>
+            <th>Instances</th>
+            <th>Avg</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>CUTLASS FP8</td>
+            <td>168.1 ms</td>
+            <td>1,444</td>
+            <td>116.4 µs</td>
+        </tr>
+        <tr>
+            <td>Triton fused quant (norm + modulation + cast)</td>
+            <td>127.0 ms</td>
+            <td>4,320</td>
+            <td>29.4 µs</td>
+        </tr>
+        <tr>
+            <td>Flash Attention SM100</td>
+            <td>~79 ms</td>
+            <td>240</td>
+            <td> - </td>
+        </tr>
+        <tr>
+            <td>Quack RMSNorm</td>
+            <td>~18 ms</td>
+            <td>1,920</td>
+            <td> - </td>
+        </tr>
+    </tbody>
+</table>
+The Triton kernel isn't a standalone BF16 to FP8 cast anymore it's absorbing the AdaLN modulation, the norm, and the cast all in one pass. Which essentially makes a huge difference.
+
+<h4>Profiling the Rowwise Pipeline</h4>
+After getting FP8+compile working, here are the profiles for that:
+<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; font-family: Arial, sans-serif;">
+  <thead>
+    <tr style="background-color: #f2f2f2;">
+      <th>Component</th>
+      <th>ms/step</th>
+      <th>%</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>FP8 GEMMs (CUTLASS)</td>
+      <td>50.3</td>
+      <td>41.5%</td>
+    </tr>
+    <tr>
+      <td>FP8 activation quant (Triton)</td>
+      <td>25.8</td>
+      <td>21.3%</td>
+    </tr>
+    <tr>
+      <td>Flash Attention</td>
+      <td>21.0</td>
+      <td>17.3%</td>
+    </tr>
+    <tr>
+      <td>Elementwise ops</td>
+      <td>6.6</td>
+      <td>5.4%</td>
+    </tr>
+    <tr>
+      <td>RoPE/cat/fused</td>
+      <td>7.4</td>
+      <td>6.1%</td>
+    </tr>
+    <tr>
+      <td>RMSNorm</td>
+      <td>4.7</td>
+      <td>3.9%</td>
+    </tr>
+  </tbody>
+</table>
+The quantization at 25.8ms/step stood out 21% of compute just for casting activations. The auto-generated Triton reduction kernel was taking 259µs per call for M=8192, K=3072, against a memory bandwidth roofline of 40-70µs. A 4-6x gap. So I wrote a custom fused CUDA rowwise quantization kernel that was 2.7x faster in isolation (130µs to ~40µs) and then discovered it was 5.7% slower in the full pipeline because it's opaque to the autotuner, breaking CUDA graph tree optimization. The overhead from graph fragmentation outweighed the raw kernel speedup.
+<br><br>
+But Then I tried writing a compiler friendly version, a Triton kernel that fuses abs, amax, div, cast and stays visible to the compilation pipeline worked. Incorporating the 2D tiling approach from fal.ai's blog (splitting over both M and K dimensions to create more CTAs) helped for the reduction, though full rowwise accumulation across K tiles requires atomic operations to merge partial maxes. The fused Triton quant kernel ultimately brought the quantization overhead from 127ms to around 50ms over 4 steps.
+<br><br>
+There was also an unfused bias bug that wasn't obvious. Every FP8 GEMM followed by a bias add was doing it as a separate <code>aten::add</code> elementwise kernel 931ms of the eager profile (21%) was nothing but bias adds. <code>torch._scaled_mm</code> accepts a <code>bias</code> argument that fuses the add directly into the CUTLASS epilogue at zero additional cost which in turn saved ~500ms per inference.
+</p>
+<h3>MXFP8: When the Hardware Is Right and the Software isn't yet</h3>
+<p>
+Rowwise FP8 is the pragmatic path. But the B200 was designed around block-scaled FP8 32 elements per scale factor, E8M0 format, <code>tcgen05.mma.block_scale</code> tensor cores. MXFP8 is what the hardware actually prefers. Dividing this section into how I progressed with every version of my script (it won't be very relevent to you here but when you look at the codebase this will start to make a lot of sense).
+<h4>The Graph Break Problem</h4>
+The first MXFP8 implementation used <code>run_grouped_blockscaled_strided</code> from the nmoe codebase, wrapped behind a <code>@custom_op</code> for PyTorch integration. Running it under <code>torch.compile</code>:
+<table>
+  <thead>
+    <tr>
+      <th>Approach</th>
+      <th>Inference Time (28 steps)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>MXFP8 V1 + compile</td>
+      <td>6.453s (→ 5.6s after warmup)</td>
+    </tr>
+    <tr>
+      <td>Rowwise FP8 + compile</td>
+      <td>3.744s</td>
+    </tr>
+    <tr>
+      <td>MXFP8 no compile</td>
+      <td>10.014s</td>
+    </tr>
+  </tbody>
+</table>
+2x slower. Here is the profile for those extra 700ms per 4 steps:
+<table border="1" cellpadding="8" cellspacing="0">
+  <tr>
+    <th>Source</th>
+    <th>Delta</th>
+    <th>% of gap</th>
+  </tr>
+  <tr>
+    <td>Graph break CPU overhead</td>
+    <td>+422ms</td>
+    <td>60%</td>
+  </tr>
+  <tr>
+    <td>Quant kernel slower</td>
+    <td>+168ms</td>
+    <td>24%</td>
+  </tr>
+  <tr>
+    <td>GEMM total slower</td>
+    <td>+54ms</td>
+    <td>8%</td>
+  </tr>
+  <tr>
+    <td>Launch overhead</td>
+    <td>+34ms</td>
+    <td>5%</td>
+  </tr>
+  <tr>
+    <td>Memcpy overhead (metadata)</td>
+    <td>+22ms</td>
+    <td>3%</td>
+  </tr>
+</table>
+The dominant factor 60% of the regression is pure Python/CPU overhead from graph breaks. <code>@custom_op</code> creates an opaque boundary. <code>torch.compile</code> cannot reason about what happens inside it. So at every linear layer, the compiled graph terminates, the Python interpreter runs the custom op, and then a new compiled region begins. With ~841 <code>custom_op</code> calls per diffusion step:
+<pre><code class="language-plaintext">
+841 calls/step × ~125µs Python overhead/call ≈ 105ms/step
+Over 28 steps:  ≈ 2.94s of pure Python overhead
+</code></pre>
+Rowwise FP8 uses <code>torch._scaled_mm</code> a known op. The entire transformer compiles as one fused graph with zero interpreter re-entries in the hot path. Triton fuses the modulation + norm + quantization into single kernels. MXFP8 shreds the graph into 841 fragments.
+<br><br>
+The quant kernel (<code>k_quantize_pack_tilewise_fp8_sf_strided_mma</code>) averaged 86.3µs per call doing per-32-element blockscale computation plus MMA scale swizzling. The rowwise Triton kernel averaged 29.4µs, fusing the entire adaLN modulation into the same pass. It's inherently more work per quantization, and it can't be fused with surrounding ops because it lives inside an opaque <code>custom_op</code>.
+
+<h4>The Lean Path Paradox</h4>
+The next attempt tried to reduce Python overhead by stripping the <code>custom_op</code> down pre-building metadata per (layer_id, M_pad) at init time, caching pre-wrapped CUTLASS scalar args, sharing a single ~100KB tensormap workspace across all 841 linears, going from 356 lines of Python per call down to ~20.
+<br><br>
+Result: 6.850s slower than the first attempt :(
+<br><br>
+Counterintuitively, the stripped-down path added more overhead. First attempt batched more work inside each call; this kernels "lean" approach meant more fine-grained Python to C++ transitions. CUDA graphs also couldn't capture custom_ops with embedded Python logic, so the <code>max-autotune</code> mode fell back to <code>no-cudagraphs</code> automatically.
+
+<h4>The C++ Extension Route and a Subtle Pointer Bug</h4>
+Further I moved to a proper C++ extension to eliminate Python dispatch overhead. V4 brought per-call CPU time from 710µs (V3) down to 48µs a 14.8x improvement in eager mode. With 23,632 linear calls over 28 steps, that matters. Except compile equalized them both at 4.39s. Whether you're paying 710µs or 48µs per call in eager mode becomes irrelevant once the compiler takes over the bottleneck shifts from dispatch overhead to graph execution structure and <code>custom_op</code> boundary overhead.
+<br><br>
+profiles on V4 revealed something stranger only 10,080 GEMM kernels launched out of 23,548 linear calls. 57% of calls were returning zeros silently, without error. When compile processes the model, it may clone or copy weight tensors during graph lowering. The MXFP8 GEMM dispatch table was keyed on weight <code>data_ptr</code> values captured during warmup. At runtime, the pointers had changed. Linears whose shapes matched warmup configs by pointer address executed correctly (the joint attention stream at <code>M_pad=8832</code>). Image-only linears (<code>M_pad=8192</code>) and text-only linears had no matching configs and silently fell through to the zero-return path.
+<h4>The Hardware Is Actually Faster</h4>
+With the pointer bug addressed, a direct GPU kernel time comparison between MXFP8 and rowwise FP8 produced this:
+<table border="1" cellpadding="8" cellspacing="0">
+  <tr>
+    <th>Component</th>
+    <th>MXFP8</th>
+    <th>Rowwise FP8</th>
+  </tr>
+  <tr>
+    <td>GEMM total</td>
+    <td>1,557ms (CuTeDSL)</td>
+    <td>2,839ms (cuBLAS)</td>
+  </tr>
+  <tr>
+    <td>Quant + metadata</td>
+    <td>321ms</td>
+    <td>fused in Triton</td>
+  </tr>
+  <tr>
+    <td>Flash Attention</td>
+    <td>545ms</td>
+    <td>545ms</td>
+  </tr>
+  <tr>
+    <td>RMSNorm</td>
+    <td>114ms</td>
+    <td>121ms</td>
+  </tr>
+  <tr>
+    <td>Total GPU</td>
+    <td>3,540ms</td>
+    <td>3,493ms</td>
+  </tr>
+  <tr>
+    <td>CPU overhead</td>
+    <td>860ms</td>
+    <td>251ms</td>
+  </tr>
+  <tr>
+    <td>Wall clock</td>
+    <td>4,400ms</td>
+    <td>3,744ms</td>
+  </tr>
+</table>
+The CuTeDSL MXFP8 GEMM is 45% faster than cuBLAS rowwise FP8 in raw kernel time. The total GPU times are almost identical (3,540ms vs  3,493ms). The entire 656ms wall clock gap is CPU and launch overhead from the <code>custom_op</code> boundary.
+<br><br>
+This holds up at the per-call level too. CuTeDSL medians at 20.9µs vs cuBLAS at 62µs for matching shapes, but launches 2.3x more instances due to how the grouped GEMM is dispatched. The metadata memcpys add another 169ms over 4 steps. The shape dependence is also interesting. Compiling against specific matrix sizes:
+<table border="1" cellpadding="8" cellspacing="0">
+  <tr>
+    <th>Shape (M×K×N)</th>
+    <th>Rowwise compiled</th>
+    <th>MXFP8 best</th>
+    <th>Gap</th>
+  </tr>
+  <tr>
+    <td>8192×3072×3072</td>
+    <td>130µs</td>
+    <td>158µs</td>
+    <td>+21%</td>
+  </tr>
+  <tr>
+    <td>8192×3072×8192</td>
+    <td>249µs</td>
+    <td>272µs</td>
+    <td>+9%</td>
+  </tr>
+  <tr>
+    <td>8192×8192×3072</td>
+    <td>296µs</td>
+    <td>424µs</td>
+    <td>+43%</td>
+  </tr>
+  <tr>
+    <td>128×3072×3072</td>
+    <td>31µs</td>
+    <td>16µs</td>
+    <td>-48% (MXFP8 wins)</td>
+  </tr>
+</table>
+for small batch sizes, MXFP8 wins handily. At large M which is where the image stream spends most of its time rowwise wins increasingly. The MLP down-projection is the worst case for MXFP8's blockscale quantization because you're quantizing 8192 columns in 32-element blocks, which is expensive.
+<h4>The Theoretical Ceiling</h4>
+With zero Python overhead, a faster blockscale quant kernel, and fused QKV/gate-up projections would look something like this (reducing GEMM calls from ~844 to ~600 per step):
+<pre><code class="language-plaintext">
+Rowwise per-step baseline:     134ms
+- MXFP8 GEMM savings:          -60ms
++ Quant overhead:              +42ms
+Net per-step:                  116ms
+28 steps → 3.25s
+</code></pre>
+That's ~14% faster than rowwise. The hardware advantage is real. Getting there requires a C++ extension that handles quant + metadata + GEMM dispatch without any Python boundary essentially the same amount of engineering that went into the fal.ai quantizer, plus the GEMM integration on top. Too much work for a blog.
+<br><br>
+fal.ai's 6+ TB/s quantizer is a quantization kernel that implements 2D grid splitting over both M and K (64x more CTAs than the naive 1D approach), TMA bulk loads, and scales written directly in the tcgen05-expected packed layout to save an HBM round-trip. It's impressive engineering, but it's the quantizer, not the full GEMM pipeline. Integrating it with a blockscaled GEMM that actually beats cuBLAS at production matrix sizes, and making that integration transparent to <code>torch.compile</code>, is a different project entirely.
+<br><br>
+Now where all of this lands us?
+<table border="1" cellpadding="8" cellspacing="0">
+  <tr>
+    <th>Configuration</th>
+    <th>Time</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td>BF16 + compile</td>
+    <td>4.130s</td>
+    <td>Baseline with compiler</td>
+  </tr>
+  <tr>
+    <td>Rowwise FP8 + compile</td>
+    <td>3.744s</td>
+    <td><code>torch._scaled_mm</code> fuses cleanly</td>
+  </tr>
+  <tr>
+    <td>MXFP8 + compile</td>
+    <td>5.6-6.5s</td>
+    <td>Graph breaks dominate</td>
+  </tr>
+  <tr>
+    <td>MXFP8 (theoretical, no overhead)</td>
+    <td>~3.25s</td>
+    <td>only if the software would be any better</td>
+  </tr>
+</table>
+</p>
+<h3>More Kernels</h3>
+After the FP8 journey settled into a 3.744s baseline with rowwise quantization and <code>torch.compile</code>, it looked like the compute graph was essentially tight. The GEMMs were running in FP8, the compiler was fusing what it could. What else was there to find?
+<br><br>
+Running some profiles on the compiled pipeline tells a story that raw wall-clock timing completely obscures. The profile showed: <code>rope_apply_real</code>, the rotary embedding application, was consuming 720ms across 28 steps roughly 12% of total inference time and its measured memory bandwidth was 3.2% of peak with 8 TB/s HBM3e I don't have to tell you how bad that is! It's either stalled on kernel launch overhead, computing redundant work, or issuing so many small transactions that the memory subsystem never reached anything close to saturation.
+<br><br>
+The kernel in question was the stock PyTorch <code>rope_apply_real</code> which is not actually a custom kernel at all. It's PyTorch's fallback implementation for complex-valued frequency tensors. The <code>pos_embed</code> module returns complex-valued <code>freqs_cis</code> tensors (shape [S, D//2], type <code>complex64</code>). Applying rotary embeddings then requires extracting <code>.real</code> and <code>.imag</code>, doing elementwise arithmetic, and stacking them back. PyTorch handles this through its complex operator dispatch, which generates scatter/gather patterns that are not contiguous, not predictable, and deeply unfriendly to <code>torch.compile</code>'s memory access analysis.
+<br><br>
+The compile trace showed this expanding into five to eight separate elementwise operations per attention layer. At 60 blocks, 28 steps, two streams (image + text), two tensors (Q and K) each, this roughly means:
+<center>60 blocks × 28 steps × 2 streams × 2 tensors (Q, K) × ~6 ops = 20,160 kernel launches</center>
+Most of those are tiny. At [2, 4096, 24, 128] for image Q, each kernel is touching 50MB of data but doing it in disconnected micro-transactions that can't be coalesced into bulk transfers. The bandwidth number of 3.2% is not a bug it's the accurate measurement of what this pattern achieves.
+<h4>Fixing RoPE</h4>
+The root problem is that <code>pos_embed.forward</code> returns complex tensors, and by the time <code>torch.compile</code> sees the downstream ops, the complex dispatch is already committed. The fix is to intercept at the source before the complex tensor ever enters the compiled graph and decompose it into real-valued (cos, sin) pairs.
+<pre><code>
+def _patch_rope_decomposition(model):
+  original_pos_embed_forward = model.pos_embed.forward
+
+  def patched_pos_embed_forward(*args, **kwargs):
+    img_freqs, txt_freqs = original_pos_embed_forward(*args, **kwargs)
+    return (
+      img_freqs.real.contiguous(),
+      img_freqs.imag.contiguous(),
+      txt_freqs.real.contiguous(),
+      txt_freqs.imag.contiguous(),
+    )
+  model.pos_embed.forward = patched_pos_embed_forward
+</code></pre>
+This runs outside the compiled region it's called once per diffusion step before the transformer block loop. The (<code>img_cos</code>, <code>img_sin</code>, <code>txt_cos</code>, <code>txt_sin</code>) tuple gets passed down to each block, which now receives contiguous float32 tensors instead of complex views. The compiled graph sees f32 inputs, can reason about their strides, and can (in principle) fuse the RoPE application with adjacent operations.
+<br><br>
+But "in principle" did not mean the default PyTorch implementation of RoPE was now efficient. The stock <code>rope_apply_real</code> fallback does:
+<pre><code>
+x_pairs = x.float().reshape(B, S, H, D // 2, 2)
+x_real = x_pairs[..., 0]
+x_imag = x_pairs[..., 1]
+c = cos[None, :, None, :]
+s = sin[None, :, None, :]
+out_real = x_real * c - x_imag * s
+out_imag = x_real * s + x_imag * c
+return torch.stack([out_real, out_imag], dim=-1).reshape(B, S, H, D).to(x.dtype)
+</code></pre>
+This is five elementwise ops with multiple reshapes and a dtype cast. Compile will fuse some of these into pointwise kernels but it will still launch with a grid determined by the outermost tensor dimensions. For [2, 4096, 24, 64] (the image Q tensor at B=2), that's a grid of (2×4096×24,) = 196,608 blocks, each processing 64 elements 128 bytes per block in bfloat16. At that granularity, the warp scheduler on B200 never builds up enough resident blocks per SM to hide the instruction latency, let alone hide memory latency.
+<h4>The Fast RoPE Kernel</h4>
+The solution is not just to write a Triton kernel for RoPE it's to restructure the compute grid. The original approach has one block per (batch×seq, head). The new design has one block per batch×seq token, processing all heads inside the block.
+<pre><code>
+@triton.jit
+def fused_rope_fast_kernel(
+  x_ptr, cos_ptr, sin_ptr, out_ptr,
+  S, H, D, HALF_D: tl.constexpr,
+  stride_x_row,
+  stride_cos_row,
+  BLOCK_HD: tl.constexpr, # H * HALF_D — all heads' half-dims at once
+):
+   
+  row = tl.program_id(0)   # one program per B*S token
+  seq_idx = row % S
+
+  hd_offs = tl.arange(0, BLOCK_HD)
+  mask = hd_offs < H * HALF_D
+
+  h_idx = hd_offs // HALF_D   # which head
+  d_idx = hd_offs % HALF_D    # which half-dim
+
+  base = row * stride_x_row
+  even_offset = base + h_idx * D + d_idx * 2
+  odd_offset = even_offset + 1
+
+  x_even = tl.load(x_ptr + even_offset, mask=mask).to(tl.float32)
+  x_odd  = tl.load(x_ptr + odd_offset,  mask=mask).to(tl.float32)
+
+  # cos/sin only indexed by (seq_idx, d_idx) — same for all heads
+  cs_offset = seq_idx * stride_cos_row + d_idx
+  cos = tl.load(cos_ptr + cs_offset, mask=mask).to(tl.float32)
+  sin = tl.load(sin_ptr + cs_offset, mask=mask).to(tl.float32)
+
+  out_even = x_even * cos - x_odd * sin
+  out_odd  = x_odd  * cos + x_even * sin
+
+  tl.store(out_ptr + even_offset, out_even.to(tl.bfloat16), mask=mask)
+  tl.store(out_ptr + odd_offset,  out_odd.to(tl.bfloat16), mask=mask)
+</code></pre>
+For image Q at [2, 4096, 24, 128], BLOCK_HD = 24 × 64 = 1536. The grid shrinks from (196608,) to (8192,) a 24x reduction in block count. More importantly: cos and sin are loaded once per token and reused across all 24 heads in registers. The original approach loaded them 24 times independently (once per head block). With B=2, image sequence length 4096, you're loading [4096, 64] = 256KB of cos/sin data 24 times per step = 6MB of redundant HBM reads per RoPE application, per step. The fast kernel loads 256KB total.
+<br><br>
+With 4 RoPE applications per block (img Q, img K, txt Q, txt K), 60 blocks, 28 steps: that's 6,720 RoPE applications. The bandwidth saving from eliminating redundant cos/sin loads alone is 6720 × 5.75MB ≈ 38GB of HBM reads per inference on a machine where memory bandwidth is the dominant bottleneck.
+<br><br>
+Measured result: 33.5µs per call vs 403µs. The 12x speedup, saving roughly 1,360ms in eager mode. After compile adds its own fusion over the surrounding BF16 ops, the remaining benefit consolidates into roughly 190ms saved in the compiled timeline. Bandwidth utilization on the fast kernel: 38% not perfect, but 12x better than the 3.2% baseline and close to roofline for a memory-bound kernel of this size.
+<h4>The Fused Kernel Suite</h4>
+Then pretty much same methodology was applied to the other bandwidth-dominated operations: AdaLN modulation, residual accumulation, and GELU. The standard path for the pre-attention normalization is:
+<ol>
+  <li>LayerNorm(x)</li>
+  <li>x_norm * (1 + scale) + shift (AdaLN modulation)</li>
+  <li>fused_rowwise_fp8_quant(x_mod)</li>
+</ol>
+Three passes over the same [B×S, D] tensor. Each pass reads D elements, does minimal compute, writes D elements back. For [8192, 3072], that's three round-trips through 48MB of data to perform operations that are fully fusible. The <code>fused_adaln_fp8</code> kernel does all three in one pass:
+<pre><code>
+@triton.jit
+def fused_adaln_fp8_kernel(x_ptr, shift_ptr, scale_ptr, out_fp8_ptr, fp8_scale_ptr, ...):
+  row = tl.program_id(0)
+  batch_idx = row // L
+
+  x = tl.load(x_ptr + row * stride_xm + d_offs * stride_xd, mask=mask).to(tl.float32)
+
+  # LayerNorm (no learned weight/bias — those are in the AdaLN params)
+  mean = tl.sum(x, axis=0) / D
+  x_centered = x - mean
+  var = tl.sum(x_centered * x_centered, axis=0) / D
+  rstd = 1.0 / tl.sqrt(var + eps)
+  x_norm = x_centered * rstd
+
+  # AdaLN modulation — load per batch-element params
+  shift = tl.load(shift_ptr + batch_idx * stride_sm + d_offs * stride_sd, mask=mask).to(tl.float32)
+  sc    = tl.load(scale_ptr + batch_idx * stride_sm + d_offs * stride_sd, mask=mask).to(tl.float32)
+  x_mod = x_norm * (1.0 + sc) + shift
+
+  # Rowwise FP8 quantization: compute amax, store scale, quantize
+  row_amax = tl.max(tl.abs(x_mod), axis=0)
+  fp8_sc = tl.maximum(row_amax / 448.0, 1e-12)
+  tl.store(fp8_scale_ptr + row, fp8_sc)
+  tl.store(out_fp8_ptr + row * stride_om + d_offs * stride_od, (x_mod / fp8_sc).to(tl.float8e4nv), mask=mask)
+</code></pre>
+One load of x, one load of (shift, scale), compute everything in registers, write FP8 output and the per-row scale. The <code>batch_idx = row // L</code> trick handles the [B, D] modulation params correctly when the input is [B×L, D] the kernel handles the batching internally without any reshape.
+<br><br>
+Two things to note about the <code>num_warps</code> choice. D=3072 requires BLOCK_D = triton.next_power_of_2(3072) = 4096. A block with <code>BLOCK_D=4096</code> loading a 3072-element row is wasting 25% of its compute 1024 of the 4096 lanes are masked out and doing nothing. With <code>num_warps=8</code> (the default for a 4096-element block), you have 8 × 32 = 256 threads distributed over 4096 elements, each thread handling 16 elements. But 25% of those thread-element assignments are masked. Dropping to <code>num_warps=4</code> cuts the thread count in half, reduces the warp scheduling pressure, and the compute-per-useful-lane actually increases. This was not obvious lower warp count usually means lower occupancy, which usually means worse performance. But for these specific shapes, the 25% waste penalty from the power-of-2 rounding dominates, and halving the warps recovers more than it loses.
+Improvement from num_warps=4 was 144ms on the full compiled pipeline.
+<h4>Fused Residual + Gate + AdaLN + FP8</h4>
+In a DiT transformer block, the pattern after the attention sublayer is:
+<pre><code>
+residual = residual + gate_1 * attn_output   # gate from AdaLN mod params
+norm_x   = LayerNorm(residual)
+mlp_in   = norm_x * (1 + scale_2) + shift_2  # second AdaLN modulation
+mlp_fp8  = FP8_quant(mlp_in)                 # before MLP FC1
+</code></pre>
+This is four operations in sequence, all touching the same [B×S, D] tensor. The <code>fused_residual_gate_adaln_fp8</code> kernel fuses all four into a single pass, and simultaneously writes two outputs: the updated residual in BF16 (needed for the final residual connection after the MLP), and the FP8-quantized MLP input:
+<pre><code>
+# Inside fused_residual_gate_adaln_fp8_kernel:
+new_res = res + gate * x              # gate is [B, D], x is [B*L, D]
+tl.store(residual_out_ptr + ..., new_res.to(tl.bfloat16), mask=mask)
+
+# LayerNorm + modulate in one pass on new_res
+mean = tl.sum(new_res) / D
+...
+x_mod = x_norm * (1.0 + sc) + shift
+fp8_sc = tl.max(tl.abs(x_mod)) / 448.0
+tl.store(fp8_scale_ptr + row, fp8_sc)
+tl.store(out_fp8_ptr + ..., (x_mod / fp8_sc).to(tl.float8e4nv), mask=mask)
+</code></pre>
+The gate tensor is [B, D] (one gate vector per batch element), while x is [B×L, D]. The kernel derives <code>batch_idx = row // L</code> for the gate lookup same trick as AdaLN. One kernel launch, two output buffers, zero intermediate allocations, zero re-reads of <code>new_res</code> for the LayerNorm. The mirror of this at the very end of each block where we just need residual + gate * mlp_output with no further normalization uses the simpler <code>fused_residual_gate</code> kernel, which is the same idea with the LayerNorm+quant path removed.
+<h4>Fused GELU + FP8 Quantization</h4>
+The MLP in each block is a standard SwiGLU/GELU FFN. After the FP8 FC1 GEMM, the output is BF16 at shape [B×S, 4D] (inner dim = 4 × 3072 = 12288). Before FC2, it needs GELU activation and then FP8 quantization for the next GEMM. Without fusion, that's:
 <ul>
-  <li>Intra-Block Bidirectionality: Allows interactions within a small group of frames, improving local coherence without breaking overall causality.</li>
-  <li>Inter-Block Causality: Ensures the model generates frames sequentially, attending only to past context, which is vital for autoregressive tasks like video generation.</li>
-  <li>KV Cache Recomputation: To handle long videos and avoid error buildup, the model uses a sliding window of frames. When evicting old frames from the KV cache, it recomputes the cache for the remaining frames using this block causal mask. This "breaks the receptive field" of outdated KVs, preventing error propagation, and also enables re-encoding the first frame to fix distribution shifts.</li>
+  <li>GELU kernel: reads 12288 × 8192 × 2 = 192MB (for the joint attention case), writes 192MB</li>
+  <li>FP8 quant kernel: reads 192MB, writes 96MB (FP8) + scale vector</li>
 </ul>
-Visually, imagine a matrix where diagonal blocks are fully attendable (bidirectional), but upper triangles (future) are masked, and lower parts allow past access only across block boundaries. This setup is key to Krea-Realtime's real-time, long-form capabilities, but I wondered if simpler or tweaked variants could reduce overhead while maintaining quality.
+192MB round-trip through HBM just to hold the GELU output before immediately quantizing it. <code>fused_gelu_fp8_quant_kernel</code> eliminates that round-trip entirely: it reads the FC1 output once, applies GELU in registers (using a Triton-compatible tanh approximation), computes the row amax, and writes only the FP8-quantized result. For the K &lt;= 8192 case, this is single-pass. For larger K, there's a two-pass variant that scans for the amax in pass 1 and quantizes in pass 2 still only two reads of the input, no write-read cycle.
 <br><br>
-So I implemented and tested several custom attention mask variants using Flex Attention. I generated masks for typical Krea setups 1560 tokens per frame, and 3 frames per block. I added options for local attention windows (local_attn_size) to limit scope and potentially speed things up, plus a causal flag for easy switching.
-<br>
-None of these ultimately outperformed the original block-causal mask in terms of generation stability and quality they either introduced artifacts, reduced coherence, or didn't save enough compute to justify the drop. But experimenting was worthwhile for understanding the trade-offs. Here's a breakdown of the key variants I tried:
-<h4>Pure Causal Mask</h4>
+The tanh approximation:
 <pre><code>
-def attention_mask(b, h, q_idx, kv_idx):
-    return kv_idx &lt;= q_idx
+@triton.jit
+def _gelu_tanh(x):
+  inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+  return 0.5 * x * (1.0 + _tanh(inner))
 </code></pre>
-A standard causal mask where each query token can only attend to itself and previous tokens in the entire sequence no block structure. Simpler than block-causal, potentially faster without intra-block bidirectionality. I hoped it would suffice for autoregressive flow while cutting recompute costs. It was a huge mess since there was no "local richness" from bidirectional blocks stability suffered a lot compared to the original.
-<div class="gif-container">
-    <img src="./assets/krea_realtime/global_causal_fa4.gif" alt="Responsive GIF" loading="lazy">
-</div>
-<h4>Local Causal Mask</h4>
+This is the standard Hendrycks GELU tanh approximation. The custom <code>_tanh</code> is needed because Triton's <code>tl.tanh</code> has precision issues on older PTX targets; the explicit exp-based implementation (exp(2x) - 1) / (exp(2x) + 1) with clamping to [-20, 20] is numerically stable and accurate enough for FP8 downstream quantization.
+<h4>Fused QKV</h4>
+Each attention layer in the dual-stream architecture runs six projection GEMMs before the actual attention: Q, K, V for the image stream, and Q, K, V for the text stream. With FP8, each requires:
+<ul>
+  <li>Quantize input to FP8 (one call to <code>fused_rowwise_fp8_quant</code>)</li>
+  <li><code>torch._scaled_mm</code>(x_fp8, W_fp8, ...)</li>
+</ul>
+For each stream independently that's 6 quant calls + 6 GEMMs = 12 kernel launches before even reaching <code>flash_attn</code>. The fused QKV approach concatenates the Q, K, V weight matrices at initialization time:
 <pre><code>
-def attention_mask(b, h, q_idx, kv_idx):
-    max_dist = local_attn_size * frame_seqlen 
-    return (kv_idx <= q_idx) & (q_idx - kv_idx < max_dist)
-</code></pre>
-Builds on pure causal but restricts attention to a sliding window of recent tokens. To reduce compute by limiting the attention span, specially useful for long contexts where full causality is memory-intensive. This helped with speed but caused disjointed frames, as the model couldn't access enough past context. It didn't handle distribution shifts well without the block recompute.
+class FusedQKVFP8Linear(nn.Module):
+  def __init__(self, q_linear, k_linear, v_linear):
+    # Concatenate along N dimension: [K, N_q+N_k+N_v]
+    fused_w = torch.cat([q_linear.weight_fp8_t, k_linear.weight_fp8_t, v_linear.weight_fp8_t], dim=1)
+    self.register_buffer('weight_fp8_t', fused_w.t().contiguous().t())
 
-<div class="gif-container">
-    <img src="./assets/krea_realtime/blaock_diag_causal_inblock_attn3.gif" alt="responsive gif" loading="lazy">
-</div>
-<h4>Intra-Block Causal Mask</h4>
-<pre><code>
-def attention_mask(b, h, q_idx, kv_idx):
-    block_size = frame_seqlen * num_frame_per_block
-    block_start = (q_idx // block_size) * block_size
-    return (kv_idx >= block_start) & (kv_idx <= q_idx)
+    # Concatenate scales: [1, N_q+N_k+N_v]
+    self.register_buffer('w_scale',
+      torch.cat([q_linear.w_scale, k_linear.w_scale, v_linear.w_scale], dim=1))
 </code></pre>
-Causal only within the current block queries can attend to earlier tokens in their block but not to past blocks at all. A stricter version of block-causal, eliminating inter-block attention to simplify KV recomputation and potentially speed up eviction. This broke long-range coherence entirely. Videos lost continuity between blocks, making it unsuitable for extended generations.
-<div class="gif-container">
-    <img src="./assets/krea_realtime/dontknow.gif" alt="responsive gif" loading="lazy">
-</div>
-<h4>Block-Diagonal Non-Causal Mask (with Optional Local Window)</h4>
+Note the <code>fused_w.t().contiguous().t()</code> pattern after concatenation, the column-major layout required by <code>_scaled_mm</code> needs to be restored. Simply concatenating along dim=1 of the transposed matrices gives the right shape but wrong strides; the double-transpose forces a contiguous copy in column-major order. The bigger win is the interaction with <code>fused_adaln_fp8</code>. Because <code>fused_adaln_fp8</code> already outputs (<code>x_fp8</code>, <code>fp8_scale</code>), the <code>FusedQKVFP8Linear</code> exposes a second forward path:
 <pre><code>
-def attention_mask(b, h, q_idx, kv_idx):
-    ends = torch.zeros(full_len, device=device, dtype=torch.long)
-    frame_indices = torch.arange(0, total_length, frame_seqlen * num_frame_per_block, device=device)
-    for tmp in frame_indices:
-        ends[tmp:tmp + frame_seqlen * num_frame_per_block] = tmp + frame_seqlen * num_frame_per_block
-    if local_attn_size == -1:
-        return (kv_idx < ends[q_idx]) | (q_idx == kv_idx)
+def forward_with_fp8_input(self, x_fp8, a_scale):
+  """Accept pre-quantized FP8 input — no requantization needed."""
+  output = torch._scaled_mm(
+    x_fp8, self.weight_fp8_t,
+    scale_a=a_scale, scale_b=self.w_scale,
+    out_dtype=torch.bfloat16,
+  )
+  ...
+  return q, k, v
+
+# One fused kernel: LayerNorm + AdaLN + FP8 quant
+img_fp8, img_sc = fused_adaln_fp8(img_2d, img_shift1, img_scale1, img_seq)
+
+# One fused GEMM: [M, D] × [D, 3D] → [M, 3D], split into Q, K, V
+img_q, img_k, img_v = self.img_qkv.forward_with_fp8_input(img_fp8, img_sc)
+</code></pre>
+Instead of quantizing Q-GEMM, K-GEMM, V-GEMM, the FP8 tensor from the AdaLN kernel flows directly into a
+single larger GEMM. The quantization cost is paid once, and the GEMM is 3× wider in the N dimension, which improves CUTLASS tile
+utilization a [8192, 3072] × [3072, 9216] GEMM is substantially better utilized than three [8192, 3072] × [3072, 3072] GEMMs,
+because the larger N allows more K-tiles to be resident and reduces the amortized fixed overhead per output element.
+<br><br>
+On the pipeline, per block, per stream its 4 Triton custom kernels + 3 GEMM launches, vs. the original ~12 Triton kernels + 6 GEMM launches. Total kernel count per step drops from roughly 5,500 (the MXFP8 profile) to a much tighter number the profiler showed 3,699 kernels/step for the new compiled baseline, and further reduction with the fused block.
+
+<h4>The FlashInfer Detour</h4>
+Tried swapping the attention backend to FlashInfer via <code>flash_attn_wrapper</code>. The problem: <code>single_prefill_with_kv_cache</code> cannot be captured by compile's CUDA graph tree optimizer, so <code>max-autotune-no-cudagraphs</code> was the only option losing graph replay. A later attempt using <code>torch.compiler.cudagraph_mark_step_begin()</code> to create explicit graph boundaries caused tensor aliasing correctness issues. Beyond the integration problems, FA4 on B200 already measured 0.34ms/call (~16% of transformer compute), with TE BF16 cuDNN at 0.38ms and TE FP8 at 0.46ms the headroom was too small to justify.
+
+<h4>The TransformerEngine Temptation</h4>
+TransformerEngine's FP8 path was benchmarked as a separate track. The kernel-level results were genuinely impressive:
+<table>
+    <thead>
+        <tr>
+            <th>Operation</th>
+            <th>TE</th>
+            <th>Custom Triton</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Quantize rowwise (3072 → FP8)</td>
+            <td>20.5µs</td>
+            <td>95.6µs</td>
+        </tr>
+        <tr>
+            <td>Quantize colwise</td>
+            <td>7.2µs</td>
+            <td>—</td>
+        </tr>
+        <tr>
+            <td>GEMM</td>
+            <td>49.6µs</td>
+            <td>66.7µs</td>
+        </tr>
+        <tr>
+            <td>Swizzle scales</td>
+            <td>5.4µs × 2</td>
+            <td>—</td>
+        </tr>
+        <tr>
+            <td>Total per call</td>
+            <td>~83µs</td>
+            <td>~164µs</td>
+        </tr>
+    </tbody>
+</table>
+TE's quantization kernel is 4.7× faster per call. TE's GEMM is measurably better too likely because TE has cuBLAS-XT integration
+with B200-specific kernel selection that Triton's autotuner doesn't replicate.
+<br><br>
+For large shapes (the [8192, 8192, 3072] joint attention linears):
+<ul>
+  <li>TE quantize: 31µs vs. custom: 256µs (8× faster)</li>
+  <li>TE GEMM: 135µs vs. custom: 170µs</li>
+</ul>
+The problem is the 100µs Python-side overhead per TE call. TransformerEngine's <code>fp8_autocast</code> context and its internal state management
+(delayed scaling, scale history, FP8 recipe tracking) add per-call CPU overhead that isn't present in the custom path. At 844 linear
+calls per step, that overhead is:
+<pre><code class="language-plaintext">
+844 calls × 100µs CPU overhead = 84.4ms per step × 28 steps = 2,363ms
+</code></pre>
+That completely wipes out any kernel-level savings. The <code>@custom_op</code> barrier problem fromMXFP8 recurs here but
+this time it's not an engineering choice, it's intrinsic to how TE manages its FP8 recipe state. You cannot eliminate it without
+reimplementing TE's internals.
+
+<h4>Partial CFG</h4>
+I did not really want to mention this but just for the sake of it here's a little section on CFG. CFG runs the transformer twice per step. Partial CFG switches to B=1 after the first <code>cfg_steps</code> denoising steps CFG matters most early where coarse structure is set; later steps refine texture where the unconditioned branch's influence is minimal. At B=1 compute roughly halves, giving a theoretical 32% reduction for <code>cfg_steps=10</code>. The complication is that <code>torch.compile</code> traces separate graphs for B=2 and B=1 shapes, requiring extended warmup and <code>torch.compiler.cudagraph_mark_step_begin()</code> at each step boundary to prevent the CUDA graph tree optimizer from merging graph segments across the CFG boundary.
+<br><br>
+Though It's worth noting that partial CFG works well for models where the negative prompt is a simple quality-suppression token list and prompts are short. It does not work well for models where the negative prompt is semantically complex or where prompts describe fine-grained visual content.
+
+<h4>The Version Progression</h4>
+Putting all of this together:
+<table>
+    <thead>
+        <tr>
+            <th>Version</th>
+            <th>Key Addition</th>
+            <th>Time</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>V5 compiled</td>
+            <td>FP8 rowwise + <code>reduce-overhead</code></td>
+            <td>~3.6s</td>
+        </tr>
+        <tr>
+            <td>V7</td>
+            <td>FP8 rowwise + <code>max-autotune</code></td>
+            <td>~3.4s</td>
+        </tr>
+        <tr>
+            <td>V8</td>
+            <td>+ fused AdaLN/residual/RoPE Triton kernels</td>
+            <td>~3.5s</td>
+        </tr>
+        <tr>
+            <td>V9</td>
+            <td>+ <code>fused_rope_fast</code> (all-heads-per-token) + <code>num_warps=4</code></td>
+            <td>3.244s</td>
+        </tr>
+        <tr>
+            <td>V10</td>
+            <td>+ partial CFG (<code>cfg_steps=10</code>)</td>
+            <td>significant drop</td>
+        </tr>
+        <tr>
+            <td>V11</td>
+            <td>+ fused GELU+FP8, fused RMSNorm+RoPE</td>
+            <td>further improvement</td>
+        </tr>
+    </tbody>
+</table>
+V8 is slightly slower than V7: the fused <code>@triton.jit</code> kernels introduce dispatch overhead that <code>torch.compile</code> can't eliminate across the opaque boundary. The savings only appear at V9 once the RoPE bottleneck (403µs/call at 3.2% bandwidth) is fixed removing that floor makes the fused AdaLN and residual kernels the dominant cost centers, where their memory round-trip savings are visible. Nuclear <code>max-autotune</code> experiments (coordinate descent tuning, all three GEMM backends, FX graph cache priming) found no meaningful improvement the bottleneck was kernel count, not configuration, and no amount of tuning reduces that without restructuring the compute graph.
+
+<h3>The Dead Ends</h3>
+Before the kernel work that ultimately worked, there was a long tail of things that didn't. These are worth documenting because the failure modes are instructive and not obvious from the outside.
+
+<h4>A Ceiling at 3.4-3.6s</h4>
+The failure mode varied by configuration but the root cause was always the same: this model is not statically
+shaped across denoising steps.
+<br><br>
+The critical dynamic is the AdaLN modulation. Every block computes <code>temb</code> <code>img_mod</code>/<code>txt_mod</code> GEMMs that produce the per-block shift,
+scale, and gate vectors. <code>temb</code> is derived from the timestep, which changes each of the 28 steps. From <code>torch.compile</code>'s perspective,
+this means the modulation GEMMs have different inputs at each step and CUDA graph capture requires truly identical computation
+(same inputs, same addresses) to replay safely.
+<br><br>
+With <code>reduce-overhead</code>, the compiler tries to capture CUDA graphs. It fails or creates 28 separate graphs (one per timestep). With
+<code>max-autotune</code>, there are no CUDA graphs, just Triton autotuning which finds configs within 5% of what CUTLASS already selects by
+default, nowhere near worth the compile overhead. With <code>fullgraph=True</code>, the Python control flow (the <code>zero_cond_t</code> conditional, dynamic
+sequence length padding) causes graph breaks that crash the compilation or silently fall back to regular mode.
+<br><br>
+The ceiling was real: ~3.4-3.6s regardless of how many TORCHINDUCTOR_* environment variables were set,
+regardless of compile thread count. After the nuclear autotune experiment (coordinate descent tuning, all three GEMM backends,
+20-run warmup, FX graph caching), the result was indistinguishable from standard max-autotune. The bottleneck was not kernel
+configuration it was kernel count, and the compiler cannot reduce kernel count when it can't merge across loop iterations that have
+different inputs.
+
+<h4>Manual CUDA Graphs</h4>
+If <code>torch.compile</code> couldn't capture graphs, could we do it manually? <code>torch.cuda.graphs</code> lets you capture any computation into a graph
+and replay it. The complication is that every tensor address used during capture must remain valid during replay meaning every
+intermediate tensor must be pre-allocated before capture and written to in-place.
+<br><br>
+For a single transformer block, the intermediates include: FP8-quantized activations (two allocations per stream), QKV projections,
+attention output, residual buffers, MLP intermediates. Across 60 blocks with two streams each, the pre-allocation requirement is
+enormous and critically, the joint Q/K/V assembly for attention has a dynamic joint_seq dimension (because txt_seq varies with
+prompt length). That alone makes graph capture fail without restructuring the entire attention assembly to use fixed max-length
+buffers with masking.
+<br><br>
+The engineering complexity to get manual CUDA graphs working would essentially require rewriting the model's memory management from
+scratch. SO It's Filed as future work for now.
+
+
+<h3>Kernel Architecture</h3>
+Having exhausted higher-level approaches, the focus shifted entirely to the micro-architecture of each transformer block: what
+operations were happening in sequence, what memory traffic those operations were generating, and where the GPU's 8 TB/s HBM bandwidth
+was being wasted.
+<br><br>
+The profiler at this stage revealed the problem was not individual kernel efficiency the fused kernels from
+the previous phase were already running at 35-52% of theoretical bandwidth. The problem was the block-to-block data movement the
+pattern of reads and writes across kernel boundaries that could not be eliminated without restructuring the loop itself.
+
+<h4>The Cross-Block Boundary Problem</h4>
+At the boundary between transformer block N and block N+1, the original sequence of operations was:
+<pre><code class="language-python">
+# End of block N
+h_new = fused_residual_gate(h, gate2, mlp_out)    # writes 48MB to HBM
+
+# Start of block N+1
+fp8, scale = fused_adaln_fp8(h_new, shift1_next, scale1_next)  # reads 48MB from HBM
+</code></pre>
+The <code>fused_residual_gate</code> kernel writes the new hidden state to HBM. The <code>fused_adaln_fp8</code> kernel immediately reads it back. There is no
+computation between these two operations it's a pure HBM write-read with nothing in between.
+<br><br>
+At [B×img_seq, D] = [2×4096, 3072], each of these buffers is 2 × 4096 × 3072 × 2 = 48MB (BF16). Across 60 blocks, 28 steps: 60 × 28 ×
+96MB = 161GB of unnecessary HBM traffic roughly 20 full passes over the entire HBM at full bandwidth, consuming ~20ms per step of
+pure latency waste.
+<br><br>
+The fix is <code>fused_cross_block_residual_gate_adaln_fp8</code> at the end of block N, instead of writing <code>h_new</code> to HBM and having block N+1
+read it back, I fused both operations into a single kernel that keeps <code>h_new</code> in registers between the residual accumulation and the
+AdaLN normalization.
+<br><br>
+This required restructuring the block interface. Previously, each block received its own modulation parameters (shift, scale, gate)
+at the start of execution. Now the block needs to access the next block's shift and scale at its end to pass through the
+cross-block kernel without ever writing <code>h_new</code> to HBM in between.
+<br><br>
+The solution was to precompute all 60 blocks' modulation GEMMs before the loop begins:
+<pre><code class="language-python">
+# Before the block loop:
+all_mods = []
+for block in self.transformer_blocks:
+    img_mp = block._img_mod(temb)
+    txt_mp = block._txt_mod(temb)
+    img_mod1, img_mod2 = img_mp.chunk(2, dim=-1)
+    txt_mod1, txt_mod2 = txt_mp.chunk(2, dim=-1)
+    img_s1, img_c1, img_g1 = img_mod1.chunk(3, dim=-1)
+    img_s2, img_c2, img_g2 = img_mod2.chunk(3, dim=-1)
+    ...
+    all_mods.append(...)
+
+# In the block loop:
+for i, block in enumerate(self.transformer_blocks):
+    is_last = (i == len(self.transformer_blocks) - 1)
+    if not is_last:
+        nm = all_mods[i + 1]
+        img_s1_next, img_c1_next = nm[0], nm[1]  # next block's adaln params
+    ...
+    # At block end:
+    h_new, fp8_next, sc_next = fused_cross_block_residual_gate_adaln_fp8(
+        h, gate2, mlp_out, img_s1_next, img_c1_next
+    )
+</code></pre>
+The modulation GEMMs (60 × 2 = 120 calls to img_mod and txt_mod) are now batched before the loop. This is fine because they all share
+the same temb input and are independent of each other. The loop then has access to both the current block's parameters and the next
+block's parameters simultaneously, enabling the cross-block fusion.
+<br><br>
+Measured savings: ~26ms per step × 28 steps = ~728ms per inference a significant number from what is architecturally a pure memory
+traffic elimination.
+<br><br>
+The block interface also changes fundamentally blocks now receive FP8-quantized inputs (produced by the previous block's cross-block
+kernel) and produce FP8-quantized outputs for the next block. This propagates the FP8 representation continuously through the block
+chain rather than dequantizing and requantizing at each boundary.
+
+<h4>Dual-Stream Kernel Dispatch</h4>
+At 60 blocks per step, 28 steps, two streams (image + text), every kernel that was launched separately for each stream represented a
+doubled dispatch overhead. With the prev setup, the <code>fused_adaln_fp8</code>, <code>fused_residual_gate_adaln_fp8</code>, and <code>fused_residual_gate</code> kernels
+each launched twice per block once for the image stream, once for text.
+<br><br>
+The dual-stream kernels in <code>fused_kernels_v2.py</code> collapse both launches into one. The grid becomes (M_img + M_txt,), and each CUDA
+block determines which stream it belongs to by checking if <code>row &lt; M_img</code>:
+<pre><code class="language-python">
+@triton.jit
+def _dual_adaln_fp8_kernel(
+    img_ptr, img_shift_ptr, img_scale_ptr, img_fp8_ptr, img_fp8sc_ptr,
+    M_img, L_img, ...,
+    txt_ptr, txt_shift_ptr, txt_scale_ptr, txt_fp8_ptr, txt_fp8sc_ptr,
+    M_txt, L_txt, ...,
+    D: tl.constexpr, eps: tl.constexpr, BLOCK_D: tl.constexpr,
+):
+    row = tl.program_id(0)
+    if row &lt; M_img:
+        # image stream: same arithmetic as before, different pointer base
+        ...
     else:
-        return ((kv_idx < ends[q_idx]) & (kv_idx >= ends[q_idx] - local_attn_size * frame_seqlen)) | (q_idx == kv_idx)
+        # text stream: identical arithmetic, different pointers
+        trow = row - M_img
+        ...
 </code></pre>
-Allows attention to all tokens before the end of the current block (non-causal within and across past blocks), plus the current token. Optional local window restricts to recent blocks. Closer to the original but non-causal overall.<br> I could not find the video for this though here are some that I forgot to document but the results are interesting. 
-
-<div class="gif-container">
-    <img src="./assets/krea_realtime/dontknownother.gif" alt="responsive gif" loading="lazy">
-</div>
+The arithmetic inside each branch is identical LayerNorm, AdaLN modulation, FP8 quantization. The only difference is which pointer
+set is used. The branch itself does not cause warp divergence within a warp as long as the grid dimensions are set so that the M_img
+boundary falls on a warp boundary (which it does for M_img = 2×8192 = 16384, a multiple of 32). In practice even with imperfect
+alignment, the text stream is small enough that the warp boundary misalignment affects very few blocks.
 <br><br>
-And then underlying the obvious I tried the full bidirectional Attention which worked pretty good probably better then the origional mask but I could just be me but anyways the tradeoff was not that exciting these customs were fun to tinker with and taught me a lot about mask impacts, but the original block-causal remains the best for Krea-Realtime's balance of stability and performance (I mean it was trainied on it so...). If I revisit, maybe hybrid masks with dynamic block sizes could bridge the gap. For now, back to the drawing board on other optimizations!
-<div class="gif-container">
-    <img src="./assets/krea_realtime/FA4test_nomask.gif" alt="responsive gif" loading="lazy">
-</div>
-This is where I was reseting the KV-cache and could not for the life of me figure out what was happening:(
-<div class="gif-container">
-    <img src="./assets/krea_realtime/kvcache0.gif" alt="responsive gif" loading="lazy">
-</div>
-
-</p>
-<h3>Ditching Flex-Attention for FlashAttention4</h3>
-<p>
-With the custom masks experimented with but ultimately sticking close to the original block-causal design, the next big bottleneck was the attention mechanism itself. Krea-Realtime relies on Flex Attention for its block-sparse masking needs, but Flex Attention isn't particularly optimized specially not for B200s. It's flexible (hence the name), but that comes at a cost in raw performance compared to kernels like <a href="https://shauray8.github.io/about_shauray/blogs/gantt_chart.html">Flash Attention 4</a> or Sage Attention switching to FA4 seemed like a no brainer to boost throughput without sacrificing accuracy I mean it does use approximations for softmax so a little degradation is inevitable but nothing that can be observed without proper evals.
-<br>
-The challenge was adapting FA4 to support our block-causal mask, since FA4 natively handles causal or local windows but not arbitrary block sparsity out of the box. FA4's forward pass (_flash_attn_fwd) allows a score_mod callable a hook to modify attention scores before softmax. This is gold for custom masking instead of a static mask tensor (which would be memory-hungry for long sequences), I defined a JIT score modifier that applies the block-causal logic dynamically.
-<pre><code>
-@cute.jit
-def block_causal_score_mod(score, b, h, q_idx, kv_idx, *, aux_tensors=None):
-    ends = aux_tensors[0]        # Int32[full_seq_len]
-    q = q_idx[0]
-    allowed = (kv_idx < ends[q]) | (kv_idx == q)
-    # typed -inf, not elegant and I hate it but I was done matching the cute dtype
-    neg_inf = score - score - 1e6 
-    return cute.where(allowed, score, neg_inf)
+This eliminates approximately 120 kernel launches per step (60 blocks × 2 stream-dispatch pairs for AdaLN and residual kernels),
+saving kernel launch overhead but not changing the GPU compute time.
+<br><br>
+The same also pre-allocated the joint Q/K/V buffers outside the block loop:
+<pre><code class="language-python">
+joint_q_buf = torch.empty(B, joint_seq, H, head_dim, device=device, dtype=dtype)
+joint_k_buf = torch.empty_like(joint_q_buf)
+joint_v_buf = torch.empty_like(joint_q_buf)
 </code></pre>
-For each query-key pair, it checks against a precomputed ends tensor (marking block boundaries). If the KV index is before the end of the query's block or exactly the query itself, keep the score else set to negative infinity (masking it out). This enforces bidirectional within blocks and causal between them. I pass self.ends_tensor (a tensor of block end indices) via aux_tensors to the kernel, allowing global access without extra overhead.
-<pre><code>
-def compute_ends_tensor(num_frames, frame_seqlen, num_frame_per_block, device):
-    total_tokens = num_frames * frame_seqlen
-    padded_total = math.ceil(total_tokens / 128) * 128
-    full_len = padded_total
+Previously, <code>torch.cat([img_q, txt_q], dim=1)</code> inside each block allocated a new tensor every iteration. Pre-allocation eliminates the
+CUDA memory allocator call and the <code>CatArrayBatchedCopy</code> kernel launch, trading them for a <code>.copy_()</code> into the pre-allocated buffer.
+<br><br>
+This is where the first unexpected bug appeared.
+<br><br>
+The contiguous copy trap. When you <code>.copy_()</code> the img Q into <code>joint_q_buf[:, txt_seq:, :, :]</code>, the destination slice has batch stride
+joint_seq × H × D = (4418 × 24 × 128) while the source (img_q, shaped [B, img_seq, H, D]) has stride img_seq × H × D = (4096 × 24 ×
+128). These are different. The destination is non-contiguous relative to what the source expects.
+<br><br>
+PyTorch's <code>.copy_()</code> dispatches to <code>elementwise_kernel</code> when source and destination strides don't match in the way that
+<code>CatArrayBatchedCopy</code> expects. The <code>elementwise_kernel</code> is a generic fallback that handles arbitrary stride patterns through index
+computation it is correct but slow. The profiler showed it consuming 23% of total GPU time more than any single custom
+Triton kernel. The pre-allocation that was supposed to eliminate allocation overhead was instead adding a massive copy overhead.
+<br><br>
+I had to revert it to <code>torch.cat</code> (which uses the fast <code>CatArrayBatchedCopy</code> kernel at ~3µs per call) and kept only the dual-stream dispatch
+savings.
+<br><br>
+The stride mismatch between a buffer slice and a smaller source tensor is a ubiquitous trap in pre-allocation
+schemes. You can't just pre-allocate the output shape and assume <code>.copy_()</code> is fast you have to verify that the destination strides
+match what the source's layout implies. The only way the pre-allocation actually helps is if you can write directly into it without a
+copy.
 
-    block_size = frame_seqlen * num_frame_per_block
-    num_blocks = math.ceil(num_frames / num_frame_per_block)
-    ends = torch.zeros(full_len, dtype=torch.int32, device=device)
-
-    block_starts = torch.arange(0, num_blocks * block_size, block_size, device=device)
-    block_ends = torch.clamp(block_starts + block_size, max=total_tokens)
-    block_ids = torch.clamp(torch.arange(full_len, device=device) // block_size, 0, num_blocks - 1)
-    ends[:total_tokens] = block_ends[block_ids[:total_tokens]]
-    ends[total_tokens:] = full_len  # padded region
-
-    return ends
+<h4>Solving the Stride Problem</h4>
+The root cause analysis pointed to a deeper problem than just the joint buffer copy. The strided access
+pattern was originating earlier in the pipeline specifically at the output of <code>FusedQKVFP8Linear</code>.
+<br><br>
+After the fused QKV GEMM, the output is [B×seq_len, 3×H×D] a contiguous tensor where Q, K, and V are laid out sequentially along
+the last dimension. The natural way to extract Q, K, V is:
+<pre><code class="language-python">
+q = output[:, :H*D]          # [B*seq, H*D]
+k = output[:, H*D:2*H*D]     # [B*seq, H*D]
+v = output[:, 2*H*D:]        # [B*seq, H*D]
 </code></pre>
-In the attention layer's forward pass (for the non-initial case), I prepare RoPE-applied queries and keys, update the KV cache (with optional eviction for local attention windows), and then call FA4:
-<pre><code>
-# ... RoPE and KV cache update code ...
-q_fa = roped_query.contiguous()
-k_fa = kv_cache["k"][:, :local_end_index].contiguous()
-v_fa = kv_cache["v"][:, :local_end_index].contiguous()
+These are non-contiguous views. Each has row_stride = 3*H*D = 9216 (the stride to advance one row) while the data it contains is only
+H*D = 3072 elements wide. For any kernel that processes Q or K with BLOCK_D = 3072 elements, the row stride is 3× the data size meaning every row access skips over 2× the data it actually reads. On an HBM with 128-byte cache line granularity, you're loading
+cache lines that contain 2/3 garbage.
+<br><br>
+Previously, <code>fused_rmsnorm_rope_qk</code> was processing Q and K with this strided input. Every read was burning bandwidth on data that would
+be discarded. Additionally, writing Q, K, V into the joint buffer with <code>.copy_()</code> on non-contiguous slices triggered the slow
+<code>elementwise_kernel</code> again.
+<br><br>
+The fix is <code>fused_qkv_rmsnorm_rope_pack</code>. Instead of extracting Q, K, V views and then normalizing and copying
+them, a single kernel reads directly from the contiguous QKV GEMM output, applies RMSNorm and RoPE inline in registers, and writes
+normalized Q and K (plus raw V) directly into the pre-allocated joint buffers at the correct position:
+<pre><code class="language-python">
+@triton.jit
+def fused_qkv_rmsnorm_rope_pack_kernel(qkv_ptr, jq_ptr, jk_ptr, jv_ptr,
+                                        q_weight_ptr, k_weight_ptr,
+                                        cos_ptr, sin_ptr, ...):
+    row  = tl.program_id(0)   # B * seq_len
+    head = tl.program_id(1)   # head index
 
-if self.local_attn_size == -1:
-    window_frames = self.num_frame_per_block
-else:
-    window_frames = self.local_attn_size
+    batch   = row // seq_len
+    seq_idx = row % seq_len
 
-# Call official FA4
-o_fa, _ = _flash_attn_fwd(
-    q=q_fa,
-    k=k_fa,
-    v=v_fa,
-    softmax_scale=1.0 / (self.head_dim ** 0.5),
-    causal=False,  # score_mod handles masking
-    score_mod=block_causal_score_mod,
-    aux_tensors=[self.ends_tensor.to(q_fa.device)],
-    return_lse=False,
+    # Source offsets within contiguous [B*seq, 3*H*D] layout
+    qkv_row_base = row * 3 * HxD + head * D
+    q_src = qkv_row_base           # Q head at head*D within Q block
+    k_src = qkv_row_base + HxD    # K head at H*D offset
+    v_src = qkv_row_base + 2*HxD  # V head at 2*H*D offset
+
+    # Destination: joint_buf[batch, joint_offset + seq_idx, head, :]
+    dst_seq  = joint_offset + seq_idx
+    dst_base = (batch * joint_seq + dst_seq) * HxD + head * D
+
+    # Load cos/sin for this sequence position
+    cos_base = seq_idx * stride_cos_row
+    cos = tl.load(cos_ptr + cos_base + half_offs).to(tl.float32)
+    sin = tl.load(sin_ptr + cos_base + half_offs).to(tl.float32)
+
+    # Q: load even/odd pairs, apply RMSNorm over full D, apply RoPE, write to joint_q
+    q_even = tl.load(qkv_ptr + q_src + half_offs * 2).to(tl.float32)
+    q_odd  = tl.load(qkv_ptr + q_src + half_offs * 2 + 1).to(tl.float32)
+    var_q  = (tl.sum(q_even * q_even) + tl.sum(q_odd * q_odd)) / D
+    rstd_q = 1.0 / tl.sqrt(var_q + eps)
+    # ... weight scaling and RoPE rotation inline ...
+    tl.store(jq_ptr + dst_base + half_offs * 2,     rq_even.to(tl.bfloat16))
+    tl.store(jq_ptr + dst_base + half_offs * 2 + 1, rq_odd.to(tl.bfloat16))
+    # [same for K, then raw copy for V]
+</code></pre>
+The read from q_src = qkv_row_base + head * D with stride 1 along the D dimension is fully coalesced adjacent threads load adjacent
+elements within the same head's Q block. The write to jq_ptr + dst_base + half_offs * 2 is also coalesced along D in the joint
+buffer. No strides are mismatched.
+<br><br>
+For image stream at B=2, seq_len=4096: 8192 × 24 = 196,608 blocks. num_warps=1 (32 threads), processing
+HALF_D=64 elements per thread pair, each block handles 64 element pairs = one head's half-dimension. With 4 warps, each
+block would have 128 idle threads (only HALF_D=64 active). At num_warps=1, occupancy is maximized: 196,608 / (148 × 32) = ~41 waves
+<br><br>
+What this eliminates per block, per stream:
+<ul>
+  <li>2× <code>fused_rmsnorm_rope_qk</code> kernel calls with strided 9216-stride reads</li>
+  <li>3× <code>.copy_()</code> into joint buffers (for Q, K, V) = slow <code>elementwise_kernel</code></li>
+  <li>Total: 8 kernel launches to 2 kernel launches</li>
+</ul>
+The profile showed <code>elementwise_kernel</code> dropping from dominant (the 23% waste from prev) to near-negligible. Savings: ~0.9s per inference.
+
+<h4>The 524ms Cache Miss</h4>
+The pipeline was already improved, but nsys on it showed a new dominant issue: <code>elementwise_kernel</code> was back, now showing 13,796
+instances at 76µs average. Total: 1,048ms across 28 steps about 524ms per inference, or roughly 14% of total time spent on implicit
+contiguous copies.
+<br><br>
+The source was in the attention output handling. Flash attention returns <code>joint_out</code> with shape [B, joint_seq, H, head_dim]. After
+reshaping to [B, joint_seq, D] via <code>flatten(2, 3)</code>, the tensor is contiguous. But then:
+<pre><code class="language-python">
+txt_attn = joint_out[:, :txt_seq, :]   # non-contiguous view
+img_attn = joint_out[:, txt_seq:, :]   # non-contiguous view
+</code></pre>
+joint_out[:, :txt_seq, :] has shape [B, txt_seq, D] but the batch stride is joint_seq × D = 4418 × 3072 rather than txt_seq × D = 226
+× 3072. The last dimension is contiguous along D, but advancing from batch element 0 to batch element 1 skips joint_seq × D elements
+instead of txt_seq × D. This is the same non-contiguous stride pattern, now between the batch and sequence dimensions.
+<br><br>
+When these non-contiguous views are passed to <code>OptimizedRowwiseFP8Linear.forward()</code>, which internally calls <code>fused_rowwise_fp8_quant</code>,
+the quantization kernel requires contiguous input. PyTorch detects the stride mismatch and inserts an implicit <code>.contiguous()</code> call 
+which dispatches to <code>elementwise_kernel</code> at 76µs. At 60 blocks × 28 steps × 2 streams × 2 (Q and K) = 6,720 attention output
+projections not quite, but 13,796 instances means every block's attention output for both streams was triggering this.
+<br><br>
+The fix is <code>fused_attn_split_fp8_quant</code>, which handles the split and quantization in a single kernel:
+<pre><code class="language-python">
+@triton.jit
+def fused_attn_split_fp8_quant_kernel(
+    joint_ptr, img_fp8_ptr, img_sc_ptr, txt_fp8_ptr, txt_sc_ptr,
+    txt_seq, img_seq, joint_seq, D, BLOCK_D: tl.constexpr,
+):
+    pid     = tl.program_id(0)   # B * joint_seq
+    batch   = pid // joint_seq
+    seq_pos = pid % joint_seq
+
+    src_base = (batch * joint_seq + seq_pos) * D
+    x = tl.load(joint_ptr + src_base + d_offs, mask=mask).to(tl.float32)
+
+    # Rowwise FP8 quant
+    row_amax  = tl.max(tl.abs(x), axis=0)
+    fp8_scale = tl.maximum(row_amax / 448.0, 1e-12)
+    x_fp8     = (x / fp8_scale).to(tl.float8e4nv)
+
+    # Route to correct output buffer based on sequence position
+    if seq_pos &lt; txt_seq:
+        dst_row = batch * txt_seq + seq_pos
+        tl.store(txt_fp8_ptr + dst_row * D + d_offs, x_fp8, mask=mask)
+        tl.store(txt_sc_ptr  + dst_row, fp8_scale)
+    else:
+        dst_row = batch * img_seq + (seq_pos - txt_seq)
+        tl.store(img_fp8_ptr + dst_row * D + d_offs, x_fp8, mask=mask)
+        tl.store(img_sc_ptr  + dst_row, fp8_scale)
+</code></pre>
+Grid: (B × joint_seq,). The read from joint_ptr + (batch * joint_seq + seq_pos) * D + d_offs is perfectly coalesced because joint_out
+is contiguous. The write goes to whichever of img_fp8 or txt_fp8 is appropriate both of which are contiguous buffers pre-allocated
+to [B×img_seq, D] and [B×txt_seq, D] respectively. The branch on seq_pos &lt; txt_seq does cause warp divergence for the few warps that
+straddle the txt/img boundary position, but those are a small fraction of the total grid.
+<br><br>
+What this replaces per block:
+<ul>
+  <li>2× implicit <code>.contiguous()</code> elementwise copies at 76µs each: −152µs</li>
+  <li>2× <code>fused_fp8_quant_kernel</code> calls at 5µs each: −10µs</li>
+  <li>Replaced with: 1× <code>fused_attn_split_fp8_quant</code> at ~10-19µs: net −143µs per block</li>
+</ul>
+Across 60 blocks × 28 steps: −143µs × 1,680 = −240ms from the direct replacement. But the numbers in the final profile were much
+better than this.
+<br><br>
+The indirect effect was larger than the direct saving. When 13,796 <code>elementwise_kernel</code> calls were running at 76µs each on prev runs, they
+were consuming HBM bandwidth continuously competing with every other Triton kernel. On B200 with 8 TB/s HBM, the memory bus is
+shared across all concurrently running kernels. The <code>elementwise_kernel</code> instances, spread throughout the timeline, were creating
+persistent memory pressure that throttled everything else.
+<br><br>
+Once this implementation eliminated them, all the prev kernels immediately got faster not because they were changed, but because the bandwidth
+competition disappeared:
+<table>
+    <thead>
+        <tr>
+            <th>Kernel</th>
+            <th>prev avg</th>
+            <th>current avg</th>
+            <th>Speedup</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>fused_qkv_rmsnorm_rope_pack</code></td>
+            <td>129.9µs</td>
+            <td>61.6µs</td>
+            <td>2.11×</td>
+        </tr>
+        <tr>
+            <td><code>_dual_residual_gate_adaln_fp8</code></td>
+            <td>101.4µs</td>
+            <td>52.9µs</td>
+            <td>1.92×</td>
+        </tr>
+        <tr>
+            <td><code>_cross_block_residual_gate_adaln_fp8</code></td>
+            <td>100.3µs</td>
+            <td>50.9µs</td>
+            <td>1.97×</td>
+        </tr>
+        <tr>
+            <td><code>fused_attn_split_fp8_quant</code></td>
+            <td>(new)</td>
+            <td>18.8µs</td>
+            <td>—</td>
+        </tr>
+    </tbody>
+</table>
+Nearly 2× across the board, from fixing one contiguous-copy bug. This is the B200's large HBM bandwidth  working against you
+when you have high bandwidth, every kernel that wastes it creates an outsized slowdown for everything else in the timeline.
+<br><br>
+final result: 3.036s / 9.22 it/s.
+
+<h4>Register Pressure Kills SM Occupancy</h4>
+Moving forward I attempted a grid redesign for <code>fused_qkv_rmsnorm_rope_pack</code> that seemed theoretically better. The prev version uses grid
+(B×seq_len, H) one block per (token, head). For image stream at B=2: 8192 × 24 = 196,608 blocks. The theory said: these 24 blocks
+per token are all processing the same sequence position, loading the same <code>cos[seq_idx]</code> and <code>sin[seq_idx]</code>. That's 24 redundant HBM
+reads of 64 float32 values (256 bytes) per token = 24 × 8192 × 256 = 50MB of redundant cos/sin reads per QKV kernel call.
+<br><br>
+The new kernel redesign's the grid (B×seq_len,) one block per token, with a loop over all H=24 heads inside each block. Load cos/sin
+once, process all 24 heads in sequence.
+<br><br>
+On paper from 196,608 blocks to 8,192 blocks, 24× fewer waves, cos/sin loaded once per token. Expected 20-30µs vs the measured 61.6µs.
+<br><br>
+In practice: 171.2µs — 2.78× slower than prev.
+<br><br>
+The failure mechanism is register pressure and SM occupancy. Processing one head of Q+K+V at head_dim=128 requires holding:
+<ul>
+  <li>Q: 128 float32 = 512 bytes</li>
+  <li>K: 128 float32 = 512 bytes</li>
+  <li>V: 128 bfloat16 = 256 bytes</li>
+  <li>cos, sin: 64 float32 each = 512 bytes</li>
+  <li>q_weight, k_weight: 128 float32 each = 1024 bytes</li>
+  <li>Temporaries (RMSNorm variance, rstd, rotated values): ~512 bytes</li>
+</ul>
+Per head ~3.3KB of register state. Processing H=24 heads in a loop with the compiler trying to pipeline iterations the compiler
+attempts to keep cos/sin and norm weights in registers across iterations (since they're loop-invariant), which pushes register usage
+toward 3.3KB × 2-3 heads in flight simultaneously = 7-10KB of registers per block.
+<br><br>
+On B200, each SM has 256KB of registers. At 7-10KB per block, only 25-36 blocks can reside simultaneously per SM. The prev version,
+processing one head per block with ~1KB of registers, fits ~200+ blocks per SM far higher occupancy, far better ability to hide HBM
+latency through warp switching.
+<br><br>
+Furthermore, with new grid of 8,192 blocks and 148 SMs: 8192 / 148 ≈ 55 blocks per SM per wave. With max 36 blocks resident, this
+creates a massive serial queue each SM must process 1-2 waves of 36 blocks sequentially, with kernel execution dominating
+wall-clock time. The prev version's 196,608 blocks across 148 SMs creates deep enough parallelism that the SM is nearly always busy.
+<br><br>
+The convoy effect was visible in the trace after each QKV kernel call completed, there was a brief GPU-wide idle gap as
+downstream kernels waited for the QKV computation to fully drain. The <code>_dual_residual_gate_adaln_fp8</code> and
+<code>_cross_block_residual_gate_adaln_fp8</code> kernels both regressed to ~100µs (from ~53µs), because the
+GPU scheduler was queuing them behind the long-running QKV blocks.
+<br><br>
+Result: 3.476s 14% worse than prev. Kept in the codebase only as a documented failure case.
+<br><br>
+For kernels with large head_dim (128 elements) and many heads (24), the (token, head) grid decomposition is
+categorically better than (token,) with a head loop. The redundant cos/sin loads (50MB) are cheaper than the register pressure and SM
+occupancy loss from holding all heads in flight simultaneously. This is non-obvious from first principles the "reduce HBM reads"
+argument seems correct, but it fails because it ignores the denominator: lower occupancy means higher HBM access latency per read,
+erasing the bandwidth savings.
+
+<h3>Final Performance Breakdown</h3>
+The best profile shows the GPU kernel time budget for a full 28-step inference:
+<table>
+    <thead>
+        <tr>
+            <th>Kernel</th>
+            <th>Calls</th>
+            <th>Avg</th>
+            <th>Total</th>
+            <th>% of GPU</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>CUTLASS FP8 GEMMs</td>
+            <td>16,828</td>
+            <td>80.4µs</td>
+            <td>1.353s</td>
+            <td>50%</td>
+        </tr>
+        <tr>
+            <td>Flash attention (FA4)</td>
+            <td>1,680</td>
+            <td>363µs</td>
+            <td>0.610s</td>
+            <td>23%</td>
+        </tr>
+        <tr>
+            <td><code>fused_gelu_fp8_quant</code></td>
+            <td>3,360</td>
+            <td>69.8µs</td>
+            <td>0.235s</td>
+            <td>9%</td>
+        </tr>
+        <tr>
+            <td><code>fused_qkv_rmsnorm_rope_pack</code></td>
+            <td>3,360</td>
+            <td>61.6µs</td>
+            <td>0.207s</td>
+            <td>8%</td>
+        </tr>
+        <tr>
+            <td><code>_dual_residual_gate_adaln_fp8</code></td>
+            <td>1,680</td>
+            <td>52.9µs</td>
+            <td>0.089s</td>
+            <td>3%</td>
+        </tr>
+        <tr>
+            <td><code>_cross_block_residual_gate_adaln_fp8</code></td>
+            <td>1,652</td>
+            <td>50.9µs</td>
+            <td>0.084s</td>
+            <td>3%</td>
+        </tr>
+        <tr>
+            <td><code>fused_attn_split_fp8_quant</code></td>
+            <td>1,680</td>
+            <td>18.8µs</td>
+            <td>0.032s</td>
+            <td>1%</td>
+        </tr>
+        <tr>
+            <td>VAE + misc</td>
+            <td>—</td>
+            <td>—</td>
+            <td>0.090s</td>
+            <td>3%</td>
+        </tr>
+    </tbody>
+</table>
+Total GPU kernel time: 2.700s. Wall clock: 3.036s. Gap: 0.336s (11%).
+<br><br>
+That 336ms gap is pure CPU/launch overhead: kernel dispatch latency, Python interpreter time, PyTorch tensor metadata operations,
+memory allocator calls for the few remaining dynamic allocations. It's the floor of what's achievable without CUDA graphs and you
+can't have CUDA graphs without pre-allocating every intermediate tensor and making timestep changes happen through buffer writes
+rather than new tensor creation.
+<br><br>
+50% of GPU time is CUTLASS FP8 GEMMs. These are running at B200's theoretical throughput for FP8 matrix multiplication
+compute-bound, irreducible. 23% is flash attention also compute-bound, already at FA4's peak for this sequence length. Together,
+73% of GPU time is in kernels that are already optimal.
+<br><br>
+The Triton custom kernels (gelu, QKV pack, dual residual, cross-block, attn split) account for 24% of GPU time and are running within
+5-15% of the B200's theoretical memory bandwidth limit. There is no more to extract from these kernels individually.
+<br><br>
+The only remaining significant optimization is CUDA graphs eliminating the 336ms CPU gap. That would require pre-allocating the FP8
+activation buffers (already partially done with the joint QKV buffers), pinning the residual buffers, and restructuring the timestep
+injection to write into pre-captured buffer addresses rather than creating new tensors. The modulation precomputation partially addresses this all 120 modulation GEMMs are now outside the block loop and could be captured separately. But the
+block loop itself still creates per-step dynamic tensors that block graph capture.
+<br><br>
+Overall result from FP8 baseline to current: ~4.5s to 3.036s, 1.48× speedup, 9.22 it/s.
+
+<h3>The Free Lunch</h3>
+With the kernel work at 3.036s for 28 steps, the question is whether all 28 need to be first-order Euler steps. The flow-matching trajectory is a continuous ODE, and first-order Euler accumulates error proportional to step size. Higher-order integrators use previous steps to extrapolate more accurately, needing fewer steps for the same quality.
+
+<h4>DPM-Solver++</h4>
+<code>DPMSolverMultistepScheduler</code> from Diffusers supports flow-matching natively with <code>prediction_type='flow_prediction'</code> and <code>use_flow_sigmas=True</code>. The critical parameter is <code>flow_shift=np.exp(mu)</code> getting this wrong misaligns the solver's timestep sequence with the model's trained sigma schedule, causing severe quality regression. <code>lower_order_final=True</code> drops to first-order for the last 1-2 steps where the velocity field is nearly constant and high-order extrapolation overshoots. <code>final_sigmas_type='zero'</code> is also required without it the pipeline receives an unexpected extra sigma at the end, producing blurry outputs.
+
+<h4>Results</h4>
+Euler-20 and Euler-16 both show quality degradation on fine-detail prompts the step budget isn't enough for first-order integration. DPM2-14 (14 steps, order=2) matches Euler-28 quality on the complex test prompt with no perceptible regression at 1.52s vs 3.036s. DPM3 at 12-14 steps shows subtle color drift from higher-order extrapolation sensitivity at BF16. The winning config:
+<ul>
+  <li>Euler-28: 3.036s / 9.22 it/s (reference)</li>
+  <li>DPM2-14: ~1.52s / ~18.4 it/s same quality, 2× faster</li>
+  <li>vs. original FP8 baseline: ~4.5s → 2.96× total speedup</li>
+</ul>
+
+<h3>Conclusion: The Full Stack and What It Cost</h3>
+
+<h4>The Piece That Was Missing From Every Triton Profile</h4>
+Before the conclusion's broader lessons, there is one optimization from the profiling sessions that hasn't been covered and deserves
+its own callout: bias fusion.
+<br><br>
+When looking at the early nsys profiles of the eager pipeline, <code>aten::add</code> showed up at 931ms which was 21% of total eager time. This seemed
+implausible. Where was 931ms of elementwise add coming from? The FP8 GEMMs write BF16 outputs with no bias, and then somewhere an add
+was happening.
+<br><br>
+The source: <code>_fp8_gemm</code>, the helper that wraps every <code>torch._scaled_mm</code> call:
+<pre><code class="language-python">
+def _fp8_gemm(x_fp8, x_scale, fp8_linear):
+    output = torch._scaled_mm(
+        x_fp8, fp8_linear.weight_fp8_t,
+        scale_a=x_scale, scale_b=fp8_linear.w_scale,
+        out_dtype=torch.bfloat16,
+    )
+    if fp8_linear.bias is not None:
+        output = output + fp8_linear.bias   # ← separate elementwise kernel
+    return output
+</code></pre>
+The bias add was a separate kernel launch after every GEMM. At 60 blocks × 28 steps × multiple linear layers per block, this
+accumulated to thousands of 30-50µs elementwise kernels.
+<br><br>
+<code>torch._scaled_mm</code> accepts a <code>bias</code> argument. When provided, CUTLASS fuses the bias addition into the GEMM epilogue it's applied
+during the write-out of the GEMM tile, with zero additional memory traffic, zero additional kernel launch. The fix is one line per
+call site:
+<pre><code class="language-python">
+output = torch._scaled_mm(
+    x_fp8, fp8_linear.weight_fp8_t,
+    scale_a=x_scale, scale_b=fp8_linear.w_scale,
+    out_dtype=torch.bfloat16,
+    bias=fp8_linear.bias,    # ← fused into CUTLASS epilogue, free
 )
-x = o_fa
-
-# ... update cache indices ...
 </code></pre>
-The _flash_attn_fwd function itself is a beast it's the core of FA4, handling everything from varlen sequences and paged KV to split-KV for large contexts and supports features like - Dynamic tiling (e.g., m_block_size=128, n_block_size=128), GQA/MQA packing for efficiency, Custom mods via score_mod and mask_mod, Split-KV for memory-bound scenarios. 
-<br>
-I see so much perf that I give up on nsys. I'll upload the nsys profile somewhere and link it here.
-    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/profile1.png" alt="Image 1" style="width: 100%; height: auto;">
-        <img src="./assets/krea_realtime/profile2.png" alt="Image 2" style="width: 100%; height: auto;">
-    </div>
-I started with untuned shapes no autotuning for tile sizes or clusters which meant the initial inference times actually increased compared to Flex Attention. The overhead from dynamic compilation and the custom mod added up, especially for Krea-Realtime's long sequences. But this was expected FA4 shines when tuned.
-<br>
-With some changes like enabling autotuning, adjusting block sizes (m_block_size, n_block_size), or even integrating split-KV I believe I can bring it down to a respectable number. The CuTe integration allows for that flexibility, and ongoing work in the FlashAttention repo (e.g., Blackwell-specific fixes) should help. Plus, combining this with FP8 (once the DLPack issue is sorted) could be explosive. Code to everything talked in this blog lives here <a href="https://github.com/shauray8/blackwan/tree/master/krea_realtime">BlackWan</a>
+Saving ~500ms per inference. Across 28 steps, this single API argument change eliminated approximately one-sixth of total wall-clock
+time that the optimization stack had been burning on something the GEMM was fully capable of doing for free.
 <br><br>
-I'm not good at prompting but here is V2V with all the above mentioned tricks and optimizations.
-</p>
-<div class="img-comp-container">
-        <div class="img-comp-img">
-            <img src="./assets/krea_realtime/v2vtestinit.gif" alt="Before GIF">
-        </div>
-        <div class="img-comp-img img-comp-overlay">
-            <img src="./assets/krea_realtime/v2vgenerated.gif" alt="After GIF">
-        </div>
-    </div>
+This is the kind of bug that only appears when you look at the profiler output without a preconceived narrative about where time is
+going. The assumption was that the GEMMs and attention were the dominant costs. They were, but only after you account for 931ms of
+avoidable elementwise bias adds that weren't visible in the high-level timing. when 21% of your time shows
+up in aten::add, something is being added.
 
-<script>
-        function initComparisons() {
-            var x, i;
-            x = document.getElementsByClassName("img-comp-overlay");
-            for (i = 0; i < x.length; i++) {
-                compareImages(x[i]);
-            }
+<h4>The Non-Transformer Components</h4>
+The text encoder and VAE decoder, despite appearing in every
+inference run, were measured once and then permanently deprioritized:
+<table>
+    <thead>
+        <tr>
+            <th>Component</th>
+            <th>Time</th>
+            <th>% of total</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Text encoder (pos + neg prompt)</td>
+            <td>19ms</td>
+            <td>0.5%</td>
+        </tr>
+        <tr>
+            <td>VAE decode</td>
+            <td>43ms</td>
+            <td>1.2%</td>
+        </tr>
+        <tr>
+            <td>Total</td>
+            <td>62ms</td>
+            <td>1.7%</td>
+        </tr>
+    </tbody>
+</table>
+The text encoder a Qwen2.5-VL-7B transformer runs in 9.5ms per call at short prompt lengths. The VAE decoder is already memory-bandwidth-bound at its natural size; <code>torch.compile</code> gives zero improvement because
+there's nothing to fuse in a sequence of grouped convolutions. Using vLLM or SGLang for the text encoder would add operational
+complexity for a 19ms saving on a 3s inference. The VAE could be quantized, but its 43ms contribution would at best halve to 21ms a
+0.6% improvement at the cost of potential image quality regression.
 
-            function compareImages(img) {
-                var slider, clicked = 0, w, h;
-                w = img.offsetWidth;
-                h = img.offsetHeight;
-                img.style.width = (w / 2) + "px"; // Start at middle
-
-                slider = document.createElement("DIV");
-                slider.setAttribute("class", "img-comp-slider");
-                img.parentElement.insertBefore(slider, img);
-
-                // No need for vertical centering since height is 100%
-                slider.style.left = (w / 2) - (slider.offsetWidth / 2) + "px";
-
-                slider.addEventListener("mousedown", slideReady);
-                window.addEventListener("mouseup", slideFinish);
-                slider.addEventListener("touchstart", slideReady);
-                window.addEventListener("touchend", slideFinish);
-
-                function slideReady(e) {
-                    e.preventDefault();
-                    clicked = 1;
-                    window.addEventListener("mousemove", slideMove);
-                    window.addEventListener("touchmove", slideMove);
-                }
-
-                function slideFinish() {
-                    clicked = 0;
-                }
-
-                function slideMove(e) {
-                    var pos;
-                    if (clicked == 0) return false;
-                    pos = getCursorPos(e);
-                    if (pos < 0) pos = 0;
-                    if (pos > w) pos = w;
-                    slide(pos);
-                }
-
-                function getCursorPos(e) {
-                    var a, x = 0;
-                    e = (e.changedTouches) ? e.changedTouches[0] : e;
-                    a = img.getBoundingClientRect();
-                    x = e.pageX - a.left;
-                    x = x - window.pageXOffset;
-                    return x;
-                }
-
-                function slide(x) {
-                    img.style.width = x + "px";
-                    slider.style.left = img.offsetWidth - (slider.offsetWidth / 2) + "px";
-                }
-            }
-        }
-
-        // Initialize the slider
-        initComparisons();
-    </script>
-
-<h3>Profile insights on warmup</h3>
-<p>
-The denoising_loop dominates at 41%, which makes sense for an autoregressive video model it's the core sampling loop. Transformer steps (0-4) eat up another ~30% combined, with recompute_kv_cache at 16% highlighting the cost of our block-causal KV recomputation. VAE decode is minor (1.4%), but text encoding is quick.
-    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/nsys1.png" alt="Image 2" style="width: 100%; height: auto;">
-    </div>
-
-cudaMemcpyAsync (78.3%) and cudaStreamSynchronize (18.5%) dominate lots of async copies and sync waits, likely from data movement in FA4 and KV cache. Kernel launches are cheap (1.4%), but mallocs add up.
-
-    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/nsys2.png" alt="Image 2" style="width: 100%; height: auto;">
-    </div>
-
-    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/nsys3.png" alt="Image 2" style="width: 100%; height: auto;">
-    </div>
-
-    <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/nsys4.png" alt="Image 2" style="width: 100%; height: auto;">
-    </div>
-
-</p>
-
-
-<h3>Next Steps Part-2</h3>
-I've made solid progress with custom linears, FP8 experiments, mask tweaks, and FA4 integration, but there's still plenty of low-hanging fruit (and some tougher nuts) to crack for ultimate performance. Here's my roadmap for the coming weeks.
+<h4>Why compile Eventually Worked</h4>
+The earlier conclusion that <code>torch.compile</code> was a dead end was accurate at the time, but became outdated once the custom kernel
+architecture changed the model's computational structure. The reason <code>torch.compile</code> failed originally: AdaLN modulation GEMMs inside
+the block loop had different inputs at each denoising step (different timestep - different temb - different shift/scale/gate
+vectors). CUDA graph capture requires static inputs at every step of the captured region. With modulation GEMMs inside the loop,
+every denoising step was a different computation graphs couldn't be reused.
 <br><br>
-PyTorch Compile/Inductor now supports targeting NVIDIA's Python CuTeDSL (alongside Triton), enabling up to 2x faster Flex Attention compared to Triton-based implementations. This is huge for Krea-Realtime, since Flex Attention is our fallback for complex block-sparse masks.
+The cross-block modulation precomputation changed this. By hoisting all 120 modulation GEMMs (60 blocks × 2 streams) before the block loop, the loop body itself is now a static computation graph each iteration receives different pre-computed <code>shift</code>/<code>scale</code>/<code>gate</code> tensors, but the graph structure is identical. CUDA graph capture can handle "different input tensors" but not "different computation graph". The compiled profile confirmed 56 <code>cudaGraphLaunch</code> calls across 2 runs × 28 steps, one per denoising step, capturing the entire 60-block forward pass.
 <br><br>
-Speaking of FA4, the ecosystem is catching up nicely. Flex-Attn has now integrated FA4 in source builds (PyTorch PR #167040), which could simplify my setup no more manual hooking if it handles block-causal natively.
+The resulting compiled optimization ladder, applied on top of the newer kernel stack:
+<table>
+    <thead>
+        <tr>
+            <th>Addition</th>
+            <th>Time</th>
+            <th>Delta</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td>new baseline</td><td>3.403s</td><td>—</td></tr>
+        <tr><td>+ <code>torch.compile</code></td><td>3.287s</td><td>−116ms</td></tr>
+        <tr><td>+ GELU single-pass (kernel fix)</td><td>3.213s</td><td>−74ms</td></tr>
+        <tr><td>+ adaLN <code>num_warps=4</code></td><td>3.069s</td><td>−144ms</td></tr>
+        <tr><td>+ attn_split <code>num_warps=2</code></td><td>3.019s</td><td>−50ms</td></tr>
+        <tr><td>+ QKV pack <code>num_warps=1</code></td><td>2.815s</td><td>−204ms</td></tr>
+    </tbody>
+</table>
+The total savings from applying <code>torch.compile</code> on top of custom kernel architecture 588ms roughly the same as
+what <code>torch.compile</code> alone produced with no custom kernels, but now on a smaller residual. The key insight: compile + custom kernels
+are not mutually exclusive. Custom kernels handle the operations where you need register-level control. Compile handles the
+surrounding elementwise fusion, tensor metadata operations, and CUDA graph capture. They compose when the architecture is structured
+to allow graph capture.
 
-Even better, the Flash-Attention repo has a PR (#1985) adding block-sparse support for SM100: It implements block-sparse in flash_fwd_sm100.py, updates interface.py for SM100 block calcs (with a 2x multiplier on m_block_size since one CTA handles 2*tile_m rows), adds mask_mod in mask.py for sparse masking.
+<h4>Final Numbers</h4>
+Starting from the FP8 rowwise baseline and stacking every optimization:
+<table>
+    <thead>
+        <tr>
+            <th>Milestone</th>
+            <th>Time</th>
+            <th>Speedup vs FP8 baseline</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td>FP8 rowwise baseline</td><td>~4.5s</td><td>1.00×</td></tr>
+        <tr><td>+ Triton kernel suite</td><td>~3.15s</td><td>1.43×</td></tr>
+        <tr><td>+ Cross-block fusion, dual-stream</td><td>~3.4s</td><td>1.32×</td></tr>
+        <tr><td>+ Fused QKV pack, attn split</td><td>3.036s</td><td>1.48×</td></tr>
+        <tr><td>+ Bias fusion, compiled, warp tuning</td><td>2.815s</td><td>1.60×</td></tr>
+        <tr><td>+ DPM-Solver++ 14 steps</td><td>~1.41s</td><td>3.19×</td></tr>
+    </tbody>
+</table>
+The DPM2-14 result ~1.41s per inference for 1024×1024 at quality equivalent to Euler-28 represents a compound of two orthogonal
+optimization strategies: kernel-level throughput and numerical solver efficiency. Neither alone gets there. Both together get to a
+point that would have seemed unreachable at the start of the blog.
 
-I'll build from source and test this potentially replacing my custom score_mod with their optimized block-sparse path.
+<h4>What Remains</h4>
+CUDA graphs for the full forward pass. The current architecture captures one graph per denoising
+step. A full-inference CUDA graph would capture all 28 steps including latent updates and scheduler steps as a single graph with
+conditional re-recording. The primary obstacle is the scheduler's step() function, which does CPU-side sigma index arithmetic that
+can't be captured. This could be resolved by pre-computing all 28 sigma steps before capture and using a GPU-side counter.
 <br><br>
-My UntunedQuackLinear was a great start, but as the name implies, it's untuned leaving perf on the table. Next, I'll enable tuning in the GEMM kernels (tuned=True in linear_func), benchmarking different tile/cluster shapes for Krea's specific MLP dims (5120→13824→5120). CuTe's autotuning should help here.
+MXFP8 revisited with a C++ extension. The MXFP8 analysis showed that CuTeDSL's blockscaled GEMM is 45% faster in raw kernel time than
+rowwise FP8, and the entire performance gap (656ms wall-clock regression) was CPU-side <code>@custom_op</code> dispatch overhead. A C++ extension
+implementing the quantization, scale packing, and GEMM dispatch in a single operator would eliminate that boundary. With modulation
+precomputation already outside the loop, the extension's output would flow directly into the captured CUDA graph. Estimated
+theoretical best case ~116ms/step - 3.25s at 28 Euler steps, ~1.63s at 14 DPM2 steps.
 <br><br>
-I'll also tweak the underlying gemm wrapper: experimenting with pingpong=True for better overlap, larger max_swizzle_size, or varlen args if sequences vary. Not super optimistic GEMMs are already pretty optimized I'll profile before/after to quantify.
+Output projection fusion. <code>attn.to_out</code> and <code>attn.to_add_out</code> the attention output projections for img and txt streams are currently
+separate GEMMs running sequentially on non-contiguous slices of the attention output. <code>fused_attn_split_fp8_quant</code> already provides the
+FP8-quantized inputs for both. A fused output projection GEMM analogous to fused QKV would eliminate two separate GEMM launches and
+the slice view overhead.
+
+<h4>The Recurring Pattern</h4>
+Looking across the entire optimization journey, a single pattern recurs in every phase: the bottleneck is almost never what you think
+it is before you profile.
 <br><br>
-For real-time video gen, I need to hit at least 16 frames/sec with streaming enabled. Single GPU is fine for prototyping, but tensor parallelism (TP) across 2-4 B200s should get me there distributing model layers or attention heads. I'll start with 2x B200s, sharding the transformer. Streaming means generating frames on-the-fly with KV cache, so low-latency TP is key. If needed, bump to 4x for more parallelism, hitting my 16 fps target for longer clips.
+The FP8 GEMMs were the obvious target reduce precision, increase throughput. But FP8 without compile was slower, because the cast
+overhead at 64 layers × 28 steps exceeded the GEMM savings. Compile made it work, but only because it could fuse the casts away.
 <br><br>
-To guide all this, more profiling is essential. I'll ramp up my NSys runs for timeline traces, spotting bottlenecks in CuTe kernels. Also, dive into PTX disassembly to understand register usage, occupancy, and SM100-specific ops maybe hand-tweak if autotuning falls short.
+RoPE was invisible in the high-level timing. It took nsys to reveal that <code>rope_apply_real</code> was consuming 720ms at 3.2% bandwidth
+utilization not because the operation was compute-heavy, but because PyTorch's complex-number dispatch was generating 20,000+ tiny
+kernel launches across the full inference. One monkey-patch to return (cos, sin) pairs instead of complex tensors, one Triton kernel
+with a restructured grid, and 720ms became 33ms.
 <br><br>
-Then onto making it a little lossy with H2-Cache, I'm leaving this for last since this won't be fair while I write about optimizations and add a caching technique in the mix. 
-</p>
+The pre-allocated buffer optimization actively made things worse. The assumption was that eliminating <code>torch.cat</code> allocations would
+save time. It did save allocation time, but the non-contiguous <code>.copy_()</code> into pre-allocated slices was slower than the allocation it
+replaced. The profiler showed 23% of GPU time in <code>elementwise_kernel</code> on what was supposed to be a zero-cost memory
+write.
+<br><br>
+The contiguous copy fix (524ms savings) was only visible because the prev profile was examined at the kernel level, not the
+operation level. At the operation level, "attention output processing" looked fine. At the kernel level, <code>elementwise_kernel</code> was
+running 13,796 times at 76µs each. The fix was not in the attention code it was in how the output was passed to the downstream
+projection, which triggered an implicit <code>.contiguous()</code>.
+<br><br>
+Bias fusion saves 500ms from a GEMM API argument nobody used. The all-heads-per-token kernel is 2.78× slower than per-head
+despite making a compelling theoretical argument for fewer waves and shared cos/sin loads because register pressure at head_dim=128
+× H=24 collapses occupancy and creates a convoy effect.
+<br><br>
+None of these were predictable without the profiler data. All of them were obvious in hindsight.
 <hr>
     </body>
 </html>
