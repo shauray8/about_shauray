@@ -235,7 +235,7 @@ Root Cause for that would be:
 </table>
 
 
-for more details on Flash Attention 4 refer to this blog here: <a href=""https://shauray8.github.io/about_shauray/blogs/gantt_chart.html>FlashAttention4 Gantt Chart</a>
+for more details on Flash Attention 4 refer to this blog here: <a href="https://shauray8.github.io/about_shauray/blogs/gantt_chart.html">FlashAttention4 Gantt Chart</a>
 
 </p>
 <h3>Batched CFG and Quack RMSNorm</h3>
@@ -1861,7 +1861,7 @@ The resulting compiled optimization ladder, applied on top of the newer kernel s
         <tr><td>+ GELU single-pass (kernel fix)</td><td>3.213s</td><td>−74ms</td></tr>
         <tr><td>+ adaLN <code>num_warps=4</code></td><td>3.069s</td><td>−144ms</td></tr>
         <tr><td>+ attn_split <code>num_warps=2</code></td><td>3.019s</td><td>−50ms</td></tr>
-        <tr><td>+ QKV pack <code>num_warps=1</code></td><td>2.815s</td><td>−204ms</td></tr>
+        <tr style="font-weight: bold; background-color: #f8f8f8;"><td>+ QKV pack <code>num_warps=1</code></td><td>2.815s</td><td>−204ms</td></tr>
     </tbody>
 </table>
 The total savings from applying <code>torch.compile</code> on top of custom kernel architecture 588ms roughly the same as
@@ -1885,8 +1885,8 @@ Starting from the FP8 rowwise baseline and stacking every optimization:
         <tr><td>+ Triton kernel suite</td><td>~3.15s</td><td>1.43×</td></tr>
         <tr><td>+ Cross-block fusion, dual-stream</td><td>~3.4s</td><td>1.32×</td></tr>
         <tr><td>+ Fused QKV pack, attn split</td><td>3.036s</td><td>1.48×</td></tr>
-        <tr><td>+ Bias fusion, compiled, warp tuning</td><td>2.815s</td><td>1.60×</td></tr>
-        <tr><td>+ DPM-Solver++ 14 steps</td><td>~1.41s</td><td>3.19×</td></tr>
+        <tr style="font-weight: bold; background-color: #f8f8f8;"><td>+ Bias fusion, compiled, warp tuning</td><td>2.815s</td><td>1.60×</td></tr>
+        <tr style="font-weight: bold; background-color: #f8f8f8;"><td>+ DPM-Solver++ 14 steps</td><td>~1.41s</td><td>3.19×</td></tr>
     </tbody>
 </table>
 The DPM2-14 result ~1.41s per inference for 1024×1024 at quality equivalent to Euler-28 represents a compound of two orthogonal
