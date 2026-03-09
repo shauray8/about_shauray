@@ -6,7 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Optimizing Qwen-Image-2512</title>
     <meta name="viewport" content="width=device-width">
-    <meta name="description" content="Optimizing Qwen-Image-2512">
+    <meta name="description" content="Krea Realtime Optimizations">
     <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Shauray Singh blog posts" />
     <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -39,7 +39,7 @@
 
   <header class="post-header">
     <h1>Optimizing Qwen-Image-2512 on a B200: A Deep Dive</h1>
-    <p class="meta">Mar 10, 2026</p>
+    <p class="meta">Feb 18, 2026</p>
   </header>
 
   <article class="post-content">
@@ -148,7 +148,7 @@
 </div>
 <p>
 
-This blog documents the optimization pipeline for Qwen-Image-2512, specifically targeted towards B200. In this blog, I will try to dissect the naive implementation of the Qwen-Image pipeline, identify compute and memory bound regions via profiling, and apply optimizations ranging from graph compilation to custom kernel integration. At every step of the optimizations I will try to attach an image for benchmark and tokens-per-sec or the inference time either at 50 steps or at 28 steps (standard for qwen-image-2512). Here is the code for all of what we will do through the blog - <a href="https://github.com/shauray8/qwen-image-optimizations/">shauray8/qwen-image-optimizations</a>.
+This blog documents the optimization pipeline for Qwen-Image-2512, specifically targeted towards B200. In this blog, I will try to dissect the naive implementation of the Qwen-Image pipeline, identify compute and memory bound regions via profiling, and apply optimizations ranging from graph compilation to custom kernel integration. At every step of the optimizations I will try to attach an image for benchmark and tokens-per-sec or the inference time either at 50 steps or at 28 steps (standard for qwen-image-2512).
 </p>
 
 <h3>Model Architecture </h3>
@@ -1005,23 +1005,6 @@ tl.store(fp8_scale_ptr + row, fp8_sc)
 tl.store(out_fp8_ptr + ..., (x_mod / fp8_sc).to(tl.float8e4nv), mask=mask)
 </code></pre>
 The gate tensor is [B, D] (one gate vector per batch element), while x is [B×L, D]. The kernel derives <code>batch_idx = row // L</code> for the gate lookup same trick as AdaLN. One kernel launch, two output buffers, zero intermediate allocations, zero re-reads of <code>new_res</code> for the LayerNorm. The mirror of this at the very end of each block where we just need residual + gate * mlp_output with no further normalization uses the simpler <code>fused_residual_gate</code> kernel, which is the same idea with the LayerNorm+quant path removed.
-
-<table>
-    <thead>
-        <tr>
-            <th>Triton RoPE tuned Output</th>
-            <th>PreAlloc joint attn Output</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td><img src="./assets/qwen_optim/V9_triton_rope_tuned_warps.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/V10_prealloc_joint_attn.png" alt="optimization graph" style="width:100%"></td>
-
-        </tr>
-    </tbody>
-</table>
-
 <h4>Fused GELU + FP8 Quantization</h4>
 The MLP in each block is a standard SwiGLU/GELU FFN. After the FP8 FC1 GEMM, the output is BF16 at shape [B×S, 4D] (inner dim = 4 × 3072 = 12288). Before FC2, it needs GELU activation and then FP8 quantization for the next GEMM. Without fusion, that's:
 <ul>
@@ -1111,7 +1094,7 @@ TransformerEngine's FP8 path was benchmarked as a separate track. The kernel-lev
     </thead>
     <tbody>
         <tr>
-            <td>Quantize rowwise (3072 to FP8)</td>
+            <td>Quantize rowwise (3072 → FP8)</td>
             <td>20.5µs</td>
             <td>95.6µs</td>
         </tr>
@@ -1181,7 +1164,7 @@ Putting all of this together:
 <table>
     <thead>
         <tr>
-            <th>Version (for indexing)</th>
+            <th>Version</th>
             <th>Key Addition</th>
             <th>Time</th>
         </tr>
@@ -1735,22 +1718,6 @@ With the kernel work at 3.036s for 28 steps, the question is whether all 28 need
 <h4>DPM-Solver++</h4>
 <code>DPMSolverMultistepScheduler</code> from Diffusers supports flow-matching natively with <code>prediction_type='flow_prediction'</code> and <code>use_flow_sigmas=True</code>. The critical parameter is <code>flow_shift=np.exp(mu)</code> getting this wrong misaligns the solver's timestep sequence with the model's trained sigma schedule, causing severe quality regression. <code>lower_order_final=True</code> drops to first-order for the last 1-2 steps where the velocity field is nearly constant and high-order extrapolation overshoots. <code>final_sigmas_type='zero'</code> is also required without it the pipeline receives an unexpected extra sigma at the end, producing blurry outputs.
 
-<table>
-    <thead>
-        <tr>
-            <th>DPM2 - 16 steps</th>
-            <th>DPM3 - 14 steps</th>
-            <th>Euler - 28 steps</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td><img src="./assets/qwen_optim/sched_dpm2-16_result.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/sched_dpm3-14_result.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/sched_euler-28_result.png" alt="optimization graph" style="width:100%"></td>
-        </tr>
-    </tbody>
-</table>
 <h4>Results</h4>
 Euler-20 and Euler-16 both show quality degradation on fine-detail prompts the step budget isn't enough for first-order integration. DPM2-14 (14 steps, order=2) matches Euler-28 quality on the complex test prompt with no perceptible regression at 1.52s vs 3.036s. DPM3 at 12-14 steps shows subtle color drift from higher-order extrapolation sensitivity at BF16. The winning config:
 <ul>
@@ -1909,21 +1876,6 @@ Output projection fusion. <code>attn.to_out</code> and <code>attn.to_add_out</co
 separate GEMMs running sequentially on non-contiguous slices of the attention output. <code>fused_attn_split_fp8_quant</code> already provides the
 FP8-quantized inputs for both. A fused output projection GEMM analogous to fused QKV would eliminate two separate GEMM launches and
 the slice view overhead.
-<table>
-    <thead>
-        <tr>
-            <th>No AdaCache</th>
-            <th>With AdaCache</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td><img src="./assets/qwen_optim/ADACACHE_TEST_adacache_False_compile_False.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/ADACACHE_TEST_adacache_True_compile_False.png" alt="optimization graph" style="width:100%"></td>
-        </tr>
-    </tbody>
-</table>
-<center><p style="font-size:10px">The prompts were a little different from the other inferences anyways I don't plan to consider caching as optimizations in this blog so just a little output diff to consider.</p></center>
 
 <h4>The Recurring Pattern</h4>
 Looking across the entire optimization journey, a single pattern recurs in every phase: the bottleneck is almost never what you think
@@ -1951,7 +1903,7 @@ Bias fusion saves 500ms from a GEMM API argument nobody used. The all-heads-per-
 despite making a compelling theoretical argument for fewer waves and shared cos/sin loads because register pressure at head_dim=128
 × H=24 collapses occupancy and creates a convoy effect.
 <br><br>
-None of these were predictable without the profiler data. All of them were obvious in hindsight. And once again the code lives here - <a href="https://github.com/shauray8/qwen-image-optimizations/">shauray8/qwen-image-optimizations</a> see if you can improve it further and if you are at it try running it on pytorch nightly + cu13 and compatible triton that should give you the best results as far as I know.
+None of these were predictable without the profiler data. All of them were obvious in hindsight.
 <hr>
     </body>
 </html>
