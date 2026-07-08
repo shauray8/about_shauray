@@ -2,6 +2,8 @@
 <html>
 
   <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Qwen-Image TwinFlow Distillation</title>
@@ -12,13 +14,24 @@
 
     <!-- Custom CSS -->
     <link rel="stylesheet" href="main.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+    <link rel="stylesheet" id="hl-light" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+    <link rel="stylesheet" id="hl-dark" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <script>
+      window.syncCodeTheme = function (t) {
+        var l = document.getElementById('hl-light'), d = document.getElementById('hl-dark');
+        if (l && d) { l.disabled = (t === 'dark'); d.disabled = (t !== 'dark'); }
+      };
+      window.syncCodeTheme(document.documentElement.getAttribute('data-theme'));
+    </script>
 
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 </head>
     <body>
     <header class="site-header">
   <div class="wrap">
-    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
 </header>
     <div class="page-content">
       <div class="wrap">
@@ -102,38 +115,38 @@
         border: none;
     }
     .code-block {
-        border: 1px solid #d5d5e9;
+        border: 1px solid var(--code-border);
         border-radius: 4px;
         overflow: hidden;
         margin: 1.2em 0;
     }
     .code-header {
-        background: #eef;
+        background: var(--code-bg);
         padding: 5px 12px;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        border-bottom: 1px solid #d5d5e9;
+        border-bottom: 1px solid var(--code-border);
     }
     .code-lang {
         font-size: 11px;
-        color: #999;
+        color: var(--muted);
         font-family: monospace;
         text-transform: uppercase;
         letter-spacing: 1px;
     }
     .copy-btn {
         background: none;
-        border: 1px solid #c0c0d5;
-        color: #999;
+        border: 1px solid var(--code-border);
+        color: var(--muted);
         padding: 2px 8px;
         border-radius: 3px;
         cursor: pointer;
         font-size: 11px;
         transition: all 0.15s;
     }
-    .copy-btn:hover { border-color: #888; color: #444; }
-    .code-block pre[class*="language-"] { margin: 0; border-radius: 0; border: none; background: #f8f8ff; }
+    .copy-btn:hover { border-color: var(--text); color: var(--text); }
+    .code-block pre[class*="language-"] { margin: 0; border-radius: 0; border: none; background: var(--code-bg); }
     .gif-row {
       display: flex;          
       flex-wrap: nowrap;      
@@ -161,7 +174,7 @@ Efficient inference in large flow models often demands a trade-off between sampl
 The deployment of 20B+ parameter models like Qwen-Image-2512 is frequently bottlenecked by inference latency. Standard flow matching or diffusion pipelines require 28-50 Number of Function Evaluations (NFEs) to produce high-fidelity samples. Distillation techniques aim to compress this trajectory, but traditional methods face a dichotomy: adversarial distillation (e.g., GAN-based) introduces training instability and memory overhead, while consistency-based methods often degrade sharply below 4 NFEs.
 <br>
 Comes TwinFlow: utilizing a self-adversarial twin-trajectory objective to straighten flow paths without external discriminators. However, pure distillation suffers from a "performance ceiling" the student cannot exceed the teacher's distribution quality.
-<center><img src="./assets/twinflow_qwen/overview.png" alt="TwinFlow Overview"></center>
+<center><img src="./assets/twinflow_qwen/overview.png" alt="TwinFlow Overview" decoding="async"></center>
 <br>
 In this work, I try to extend the TwinFlow framework by integrating RL-guided optimization and Dynamic Renoise Sampling. These enhancements allow the student model to escape local modes inherent in the teacher's distribution while stabilizing the early training phase. I'll also add details for the infrastructure upgrades required to train this setup efficiently using FSDP2, validation loops, and bucketed datasets.
 </p>
@@ -286,10 +299,10 @@ To maximize throughput, I also added a bucketed dataset <a href="https://hugging
 <p>
 In this blog I kinda aimed to prove that  implementing Dynamic Renoise Sampling, and integrating latent-space reward gradients, it is technically feasible to train a few-step generators with complex, multi-objective loss functions. However, science is as much about understanding failure as it is about celebrating success. There was no light at the end of the tunnel this time. the training dynamics reveal critical insights into the stability limits of this approach or atleast my training run keeping in mind that I did not exactly have all the resources I would have wanted for the final run I used a 4xH200 instance from verda for the final run.
 <br><br>
-<img src="./assets/twinflow_qwen/samples.jpg" alt="Loss Overview" style="width:100%">
+<img src="./assets/twinflow_qwen/samples.jpg" alt="Loss Overview" style="width:100%" loading="lazy" decoding="async">
 <center><p style="font-size:10px">All the samples were generated using CFG:4.0 and steps:8 with hight and width set as 1328x1328</p></center>
 <h3>Results</h3>
-<img src="./assets/twinflow_qwen/comp.jpg" alt="Loss Overview" style="width:101%">
+<img src="./assets/twinflow_qwen/comp.jpg" alt="Loss Overview" style="width:101%" loading="lazy" decoding="async">
 This is a little comparison against 28 step Qwen-Image-2512 base checkpoint (on the left) and the 8 step distilled checkpoint, here the degradations are obvious still if someone wants to play with the checkpoint I've saved checkpoints from step 5000 upto 10k here <a href="https://huggingface.co/shauray/temp-ckpts-twinflow">shauray/temp-ckpts-twinflow</a> and maybe if you do, I would like to discuss what went wrong and how to improve the training run my first guess is it just needs more steps more data more batchs but I'll point out some stuff that I observed further down.
 <h3> Training Dynamics Analysis</h3>
 The training ran 10k steps on 4xH200 and exhibited a distinct "Cold Start Success, Late-Stage Divergence" pattern I cannot do a one to one comparission with vanilla TwinFlow due to insuficient compute so take all this with a grain of salt (sorry for no ablation studies):
@@ -299,9 +312,9 @@ Effective Cold Start (Steps 0-3k-5k): The Dynamic Renoise Bias (starting at 4.0)
 Divergence and Overfitting (Steps 5k-10k): As the renoise bias decayed to 1.0 (uniform sampling) and RL gradients became fully active, the validation loss began to climb steadily, reaching 1.12 by step 10k. Simultaneously, from the logs I observe massive spikes in Gradient Norm (greater than 1000), indicating that the combined RL and TwinFlow gradients became pretty unstable.
 <br>
 Sample Inconsistency: The final samples reflect this instability. While some prompts (e.g., the cow) generated coherent, high-fidelity images, others (e.g., The girl is sitting on steps in front of a building. She is relaxed and bored) suffered from severe texture artifacts or mode collapse. This suggests the RL weight (0.05) or the Reward Model sensitivity may be too aggressive for the current learning rate schedule, causing the generator to "chase" reward signals at the expense of distribution matching.
-<img src="./assets/twinflow_qwen/loss.png" alt="Loss Overview" style="width:100%">
+<img src="./assets/twinflow_qwen/loss.png" alt="Loss Overview" style="width:100%" loading="lazy" decoding="async">
 Also I did a very small run with no dynamic renoise, attaching a little loss graph from that run, for starters if I have to point out that the loss was much stable on enabling dynamic renoise and atleast until the RL kicked in the grad norm was also pretty stable with it.
-<img src="./assets/twinflow_qwen/no_renoise.png" alt="Loss Overview" style="width:100%">
+<img src="./assets/twinflow_qwen/no_renoise.png" alt="Loss Overview" style="width:100%" loading="lazy" decoding="async">
 <h4>From what I understand</h4>
 RL Warmup is Critical, but Insufficient: While I added a 2k step warmup, the divergence at 5k steps suggests the transition from "pure distillation" to "RL-guided" needs to be more gradual. A sigmoidal ramp-up for the RL weight rather than a hard switch might prevent the gradient shocks observed in the logs.
 <br>
@@ -314,8 +327,8 @@ I'm not quite sure on what to conclude here, from what I see this should work bu
 
 <hr>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
 <script>
     document.querySelectorAll('pre').forEach(function(pre) {
         var wrapper = document.createElement('div');

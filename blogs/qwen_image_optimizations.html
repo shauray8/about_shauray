@@ -2,6 +2,8 @@
 <html>
 
   <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Optimizing Qwen-Image-2512</title>
@@ -13,11 +15,21 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="main.css">
 
-    <!-- Syntax highlighting -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script>hljs.highlightAll();</script>
+    <!-- Syntax highlighting (theme-aware, non-blocking) -->
+    <link rel="stylesheet" id="hl-light" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <link rel="stylesheet" id="hl-dark" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      window.syncCodeTheme = function (t) {
+        var l = document.getElementById('hl-light'), d = document.getElementById('hl-dark');
+        if (l && d) { l.disabled = (t === 'dark'); d.disabled = (t !== 'dark'); }
+      };
+      window.syncCodeTheme(document.documentElement.getAttribute('data-theme'));
+      window.addEventListener('DOMContentLoaded', function () { hljs.highlightAll(); });
+    </script>
 
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 </head>
 
 
@@ -27,7 +39,8 @@
 
   <div class="wrap">
 
-    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
     
 </header>
 
@@ -109,7 +122,7 @@
     }
     .post pre,
     .post code {
-        background-color: #fcfcfc;
+        background-color: var(--code-bg);
         font-size: 13px; 
     }
     .gif-row {
@@ -130,19 +143,19 @@
         font-size: 14px;
     }
     th, td {
-        border: 1px solid #ccc;
+        border: 1px solid var(--border);
         padding: 6px 12px;
         text-align: left;
     }
     th {
-        background-color: #f6f8fa;
+        background-color: var(--table-head);
         font-weight: bold;
     }
 </style>
 
 
 <div class="gif-container">
-    <img src="./assets/qwen_optim/qwen_inference_optimizations.png" alt="optimization graph">
+    <img src="./assets/qwen_optim/qwen_inference_optimizations.png" alt="optimization graph" decoding="async">
     <center><p style="font-size:10px">Zoom in to see the inference times, it was a lot to condense already through the blog</p></center>
 </div>
 <p>
@@ -187,8 +200,8 @@ Replaced the default attention dispatcher with a direct invocation of <code>flas
     </thead>
     <tbody>
         <tr>
-            <td><img src="./assets/qwen_optim/baseline_original.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/post_fa4.png" alt="optimization graph" style="width:100%"></td>
+            <td><img src="./assets/qwen_optim/baseline_original.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/post_fa4.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
         </tr>
     </tbody>
 </table>
@@ -521,9 +534,9 @@ FP8 E4M3 has ~1% relative error per quantization event. A single-pass model is f
     </thead>
     <tbody>
         <tr>
-            <td><img src="./assets/qwen_optim/baseline_original.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/ROWWISE_FP8_ALL.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/BLOCKSCALED_FP8.png" alt="optimization graph" style="width:100%"></td>
+            <td><img src="./assets/qwen_optim/baseline_original.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/ROWWISE_FP8_ALL.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/BLOCKSCALED_FP8.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
         </tr>
     </tbody>
 </table>
@@ -597,7 +610,7 @@ The Triton kernel isn't a standalone BF16 to FP8 cast anymore it's absorbing the
 After getting FP8+compile working, here are the profiles for that:
 <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; font-family: Arial, sans-serif;">
   <thead>
-    <tr style="background-color: #f2f2f2;">
+    <tr style="background-color: var(--table-head);">
       <th>Component</th>
       <th>ms/step</th>
       <th>%</th>
@@ -811,8 +824,8 @@ for small batch sizes, MXFP8 wins handily. At large M which is where the image s
     </thead>
     <tbody>
         <tr>
-            <td><img src="./assets/qwen_optim/ROWWISE_FP8_ALL.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/MXFP8_V2.png" alt="optimization graph" style="width:100%"></td>
+            <td><img src="./assets/qwen_optim/ROWWISE_FP8_ALL.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/MXFP8_V2.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
 
         </tr>
     </tbody>
@@ -1014,8 +1027,8 @@ The gate tensor is [B, D] (one gate vector per batch element), while x is [B×L,
     </thead>
     <tbody>
         <tr>
-            <td><img src="./assets/qwen_optim/V9_triton_rope_tuned_warps.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/V10_prealloc_joint_attn.png" alt="optimization graph" style="width:100%"></td>
+            <td><img src="./assets/qwen_optim/V9_triton_rope_tuned_warps.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/V10_prealloc_joint_attn.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
 
         </tr>
     </tbody>
@@ -1089,8 +1102,8 @@ On the pipeline, per block, per stream its 4 Triton custom kernels + 3 GEMM laun
     </thead>
     <tbody>
         <tr>
-            <td><img src="./assets/qwen_optim/FP8_FINAL.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/FUSED_QKV_FP8.png" alt="optimization graph" style="width:100%"></td>
+            <td><img src="./assets/qwen_optim/FP8_FINAL.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/FUSED_QKV_FP8.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
         </tr>
     </tbody>
 </table>
@@ -1168,9 +1181,9 @@ Though It's worth noting that partial CFG works well for models where the negati
     </thead>
     <tbody>
         <tr>
-            <td><img src="./assets/qwen_optim/partial_cfg_14of28.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/partial_cfg_20of28.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/partial_cfg_28of28.png" alt="optimization graph" style="width:100%"></td>
+            <td><img src="./assets/qwen_optim/partial_cfg_14of28.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/partial_cfg_20of28.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/partial_cfg_28of28.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
         </tr>
     </tbody>
 </table>
@@ -1722,8 +1735,8 @@ Overall result from FP8 baseline to current: ~4.5s to 3.036s, 1.48× speedup, 9.
     </thead>
     <tbody>
         <tr>
-            <td><img src="./assets/qwen_optim/baseline_original.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/V15-final_result.png" alt="optimization graph" style="width:100%"></td>
+            <td><img src="./assets/qwen_optim/baseline_original.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/V15-final_result.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
         </tr>
     </tbody>
 </table>
@@ -1744,9 +1757,9 @@ With the kernel work at 3.036s for 28 steps, the question is whether all 28 need
     </thead>
     <tbody>
         <tr>
-            <td><img src="./assets/qwen_optim/sched_dpm2-16_result.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/sched_dpm3-14_result.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/sched_euler-28_result.png" alt="optimization graph" style="width:100%"></td>
+            <td><img src="./assets/qwen_optim/sched_dpm2-16_result.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/sched_dpm3-14_result.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/sched_euler-28_result.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
         </tr>
     </tbody>
 </table>
@@ -1860,7 +1873,7 @@ The resulting compiled optimization ladder, applied on top of the newer kernel s
         <tr><td>+ GELU single-pass (kernel fix)</td><td>3.213s</td><td>−74ms</td></tr>
         <tr><td>+ adaLN <code>num_warps=4</code></td><td>3.069s</td><td>−144ms</td></tr>
         <tr><td>+ attn_split <code>num_warps=2</code></td><td>3.019s</td><td>−50ms</td></tr>
-        <tr style="font-weight: bold; background-color: #f8f8f8;"><td>+ QKV pack <code>num_warps=1</code></td><td>2.815s</td><td>−204ms</td></tr>
+        <tr style="font-weight: bold; background-color: var(--table-head);"><td>+ QKV pack <code>num_warps=1</code></td><td>2.815s</td><td>−204ms</td></tr>
     </tbody>
 </table>
 The total savings from applying <code>torch.compile</code> on top of custom kernel architecture 588ms roughly the same as
@@ -1884,8 +1897,8 @@ Starting from the FP8 rowwise baseline and stacking every optimization:
         <tr><td>+ Triton kernel suite</td><td>~3.15s</td><td>1.43×</td></tr>
         <tr><td>+ Cross-block fusion, dual-stream</td><td>~3.4s</td><td>1.32×</td></tr>
         <tr><td>+ Fused QKV pack, attn split</td><td>3.036s</td><td>1.48×</td></tr>
-        <tr style="font-weight: bold; background-color: #f8f8f8;"><td>+ Bias fusion, compiled, warp tuning</td><td>2.815s</td><td>1.60×</td></tr>
-        <tr style="font-weight: bold; background-color: #f8f8f8;"><td>+ DPM-Solver++ 14 steps</td><td>~1.41s</td><td>3.19×</td></tr>
+        <tr style="font-weight: bold; background-color: var(--table-head);"><td>+ Bias fusion, compiled, warp tuning</td><td>2.815s</td><td>1.60×</td></tr>
+        <tr style="font-weight: bold; background-color: var(--table-head);"><td>+ DPM-Solver++ 14 steps</td><td>~1.41s</td><td>3.19×</td></tr>
     </tbody>
 </table>
 The DPM2-14 result ~1.41s per inference for 1024×1024 at quality equivalent to Euler-28 represents a compound of two orthogonal
@@ -1917,8 +1930,8 @@ the slice view overhead.
     </thead>
     <tbody>
         <tr>
-            <td><img src="./assets/qwen_optim/ADACACHE_TEST_adacache_False_compile_False.png" alt="optimization graph" style="width:100%"></td>
-            <td><img src="./assets/qwen_optim/ADACACHE_TEST_adacache_True_compile_False.png" alt="optimization graph" style="width:100%"></td>
+            <td><img src="./assets/qwen_optim/ADACACHE_TEST_adacache_False_compile_False.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
+            <td><img src="./assets/qwen_optim/ADACACHE_TEST_adacache_True_compile_False.png" alt="optimization graph" style="width:100%" loading="lazy" decoding="async"></td>
         </tr>
     </tbody>
 </table>

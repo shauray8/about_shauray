@@ -2,6 +2,8 @@
 <html>
 
   <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Attention Sink</title>
@@ -23,6 +25,7 @@
       gtag('config', 'G-RLJ3MKG26H');
     </script>
 
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 
 
@@ -32,7 +35,8 @@
 
   <div class="wrap">
 
-    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
     
 </header>
 
@@ -53,13 +57,13 @@
 }
 .post pre,
 .post code {
-    background-color: #fcfcfc;
+    background-color: var(--code-bg);
     font-size: 13px; /* make code smaller for this post... */
 }
 </style>
 
 
-<center><img src="./assets/elon_sink.png" style="width:80%"></img></center>
+<center><img src="./assets/elon_sink.png" style="width:80%" decoding="async"></img></center>
 
 <p>
 You’re staring at your attention map. Token 0, the very first one is glowing. Not because it’s important. Not because it’s the subject or the object or the scene. It’s glowing… because it does nothing. <br>
@@ -145,7 +149,7 @@ If \(k_s\) is orthogonal to all other \(k_j\), then \(q_i\) must be explicitly a
 
 </p>
 <h3>Observations in Experiments</h3>
-<center><img src="./assets/graph.webp" style="width:100%"></img>
+<center><img src="./assets/graph.webp" style="width:100%" loading="lazy" decoding="async"></img>
   <p style="font-size:12px">This very plot comes from <a>https://arxiv.org/pdf/2410.10782</a></p> </center>
 <p>
 Value Norm Plot (First row, third column in above figures)

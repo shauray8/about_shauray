@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'dark')</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>shauray singh</title>
@@ -233,6 +234,64 @@
             opacity: 0.7;
         }
 
+        /* Recent posts teaser (home) */
+        .post-list {
+            margin: 15px 0 12px 0;
+        }
+
+        .post-item {
+            display: block;
+            border: none;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+            padding: 9px 0;
+        }
+
+        .post-item:last-of-type {
+            border-bottom: none;
+        }
+
+        .post-item:hover {
+            background: transparent;
+            color: var(--text);
+            border-bottom-color: var(--border);
+        }
+
+        .post-item:hover .post-item-title {
+            background: var(--link);
+            color: var(--bg);
+        }
+
+        .post-item-head {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 4px 12px;
+        }
+
+        .post-item-title {
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .post-item-date {
+            font-size: 11px;
+            opacity: 0.6;
+            font-style: italic;
+            white-space: nowrap;
+        }
+
+        .post-item-desc {
+            font-size: 12px;
+            opacity: 0.75;
+            margin-top: 3px;
+        }
+
+        .post-list-more {
+            font-size: 12px;
+        }
+
         /* Blog Cards */
         .blog-grid {
             display: grid;
@@ -328,8 +387,8 @@
 </head>
 <body>
     <nav>
-        <a href="#" onclick="showPage('home'); return false;" class="nav-link active">home</a>
-        <a href="#" onclick="showPage('blogs'); return false;" class="nav-link">blogs</a>
+        <a href="#home" class="nav-link active" data-page="home">home</a>
+        <a href="#blogs" class="nav-link" data-page="blogs">blogs</a>
         <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
     </nav>
 
@@ -349,6 +408,38 @@
         </div>
 
         <hr>
+
+        <div class="section">
+            <h2>// blogs</h2>
+
+            <div class="post-list">
+                <a class="post-item" href="./blogs/l2p_qwen_image.html">
+                    <span class="post-item-head">
+                        <span class="post-item-title">Making Qwen-Image generate in pixel space</span>
+                        <span class="post-item-date">08/07/2026</span>
+                    </span>
+                    <span class="post-item-desc">Transferring L2P to Qwen-Image-2512. Good at 26k steps, one well-identified artifact away, and out of credits.</span>
+                </a>
+
+                <a class="post-item" href="./blogs/qwen_image_optimizations.html">
+                    <span class="post-item-head">
+                        <span class="post-item-title">Optimizing Qwen-Image-2512 on a B200</span>
+                        <span class="post-item-date">10/03/2026</span>
+                    </span>
+                    <span class="post-item-desc">FA4, FP8, MXFP8 and a pile of Triton kernels. 21s to 1.41s, with every dead end on the way.</span>
+                </a>
+
+                <a class="post-item" href="./blogs/qwen_twinflow.html">
+                    <span class="post-item-head">
+                        <span class="post-item-title">TwinFlow with latent-space RL for Qwen-Image-2512</span>
+                        <span class="post-item-date">03/03/2026</span>
+                    </span>
+                    <span class="post-item-desc">Few-step distillation with an RL loss. Cold start worked, late-stage diverged, here's why.</span>
+                </a>
+            </div>
+
+            <p class="post-list-more"><a href="#blogs">all posts →</a></p>
+        </div>
 
         <div class="section">
             <h2>// work</h2>
@@ -517,7 +608,7 @@
 
             <!--<div class="blog-card">
                 <a href="./blogs/disappearing_flex.html">
-                    <img src="./blogs/assets/disappearing_flex/cover.jpg" alt="The Disappearing Flex">
+                    <img src="./blogs/assets/disappearing_flex/cover.jpg" alt="The Disappearing Flex" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>The Disappearing Flex</h3>
                         <p>On how ordinary men used to casually display strength, and where that energy went.</p>
@@ -527,8 +618,19 @@
             </div>-->
 
             <div class="blog-card">
+                <a href="./blogs/l2p_qwen_image.html">
+                  <img src="./blogs/assets/l2p_qwen/samples_26k_c.png" alt="pixel space qwen" loading="lazy" decoding="async">
+                    <div class="blog-card-content">
+                        <h3>Making Qwen-Image generate in pixel space</h3>
+                        <p>Transferring L2P to Qwen-Image-2512, good at 26k steps, one artifact away and out of credits</p>
+                        <p class="blog-date">08/07/2026</p>
+                    </div>
+                </a>
+            </div>
+
+            <div class="blog-card">
                 <a href="./blogs/qwen_image_optimizations.html">
-                  <img src="./blogs/assets/qwen_optim/qwen_inference_optimizations_dark.gif" alt="qwen optim benchmark">
+                  <img src="./blogs/assets/qwen_optim/qwen_inference_optimizations_dark.gif" alt="qwen optim benchmark" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>Optimizing Qwen-Image-2512 on a B200: A Deep Dive</h3>
                         <p>This is a big one with every little detail explained on optimizing qwen-image-2512</p>
@@ -539,7 +641,7 @@
 
             <div class="blog-card">
                 <a href="./blogs/qwen_twinflow.html">
-                    <img src="./blogs/assets/twinflow_qwen/twinflow.gif" alt="t2i-compare">
+                    <img src="./blogs/assets/twinflow_qwen/twinflow.gif" alt="t2i-compare" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>Enhancing TwinFlow with Latent-Space RL and Dynamic Noise Scheduling for Qwen-Image-2512</h3>
                         <p>distilling Qwen-Image-2512 using TwinFlow with an RL loss, not quite there yet!</p>
@@ -550,7 +652,7 @@
 
             <div class="blog-card">
                 <a href="./blogs/t2i-compare.html">
-                    <img src="./blogs/assets/qwen_showcase.png" alt="t2i-compare">
+                    <img src="./blogs/assets/qwen_showcase.png" alt="t2i-compare" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>Z Image Turbo vs Qwen Image 2512 - Text to Image Comparison</h3>
                         <p>I was planning on distilling Qwen-Image 2512 but looking at the results I'm not very sure!</p>
@@ -561,7 +663,7 @@
 
             <div class="blog-card">
                 <a href="./blogs/krea_realtime_optimization.html">
-                    <img src="./blogs/assets/krea_realtime/showcase.gif" alt="FA4 Gantt Chart">
+                    <img src="./blogs/assets/krea_realtime/showcase.gif" alt="FA4 Gantt Chart" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>Speeding Up Krea-Realtime</h3>
                         <p>Mostly failures on speeding up krea-realtime, exploring FA4 and some quack kernels</p>
@@ -571,7 +673,7 @@
             </div>
             <div class="blog-card">
                 <a href="./blogs/gantt_chart.html">
-                    <img src="./blogs/assets/fa4.jpg" alt="FA4 Gantt Chart">
+                    <img src="./blogs/assets/fa4.jpg" alt="FA4 Gantt Chart" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>A little FA4 Gantt chart</h3>
                         <p>Following Modal's great blog on FA4, here's a little gantt chart that shows how things progress in FA4.</p>
@@ -582,7 +684,7 @@
 
             <div class="blog-card">
                 <a href="./blogs/attn_sink.html">
-                    <img src="./blogs/assets/sink.png" alt="Attention Sink">
+                    <img src="./blogs/assets/sink.png" alt="Attention Sink" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>ATTENTION SINK</h3>
                         <p>You're staring at your attention map. Token 0 the very first one is glowing because it does nothing.</p>
@@ -593,7 +695,7 @@
 
             <div class="blog-card">
                 <a href="./blogs/tread.html">
-                    <img src="./blogs/assets/tread_main.png" alt="TREAD">
+                    <img src="./blogs/assets/tread_main.png" alt="TREAD" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>TREAD: Token Routing for Efficient Architecture-agnostic Diffusion Training</h3>
                         <p>TREAD, offers better fidelity while retaining the computational efficiency of previous methods.</p>
@@ -604,7 +706,7 @@
 
             <div class="blog-card">
                 <a href="./blogs/uuid.html">
-                    <img src="./blogs/assets/uuid_tit.png" alt="UUIDs">
+                    <img src="./blogs/assets/uuid_tit.png" alt="UUIDs" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>UUIDs - Mess Within a Widely Used Standard</h3>
                         <p>Optimizing databases with UUIDs, specifically the B+ Tree</p>
@@ -615,7 +717,7 @@
 
             <div class="blog-card">
                 <a href="./blogs/seed.html">
-                    <img src="./blogs/assets/seed_thmb.png" alt="Good Seed">
+                    <img src="./blogs/assets/seed_thmb.png" alt="Good Seed" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>Good Seed Makes a Good Crop</h3>
                         <p>Discovering Secret Seeds in Text-to-Image Diffusion Models</p>
@@ -626,7 +728,7 @@
 
             <div class="blog-card">
                 <a href="./blogs/ella.html">
-                    <img src="./blogs/assets/ella-inference-examples/download.png" alt="ELLA">
+                    <img src="./blogs/assets/ella-inference-examples/download.png" alt="ELLA" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>ELLA - Equip Diffusion Models with LLM for Enhanced Semantic Alignment</h3>
                         <p>not an author, just a curious guy on the internet</p>
@@ -637,7 +739,7 @@
 
             <div class="blog-card">
                 <a href="./blogs/Deej.html">
-                    <img src="./blogs/assets/DEEJ.png" alt="DEEJ">
+                    <img src="./blogs/assets/DEEJ.png" alt="DEEJ" loading="lazy" decoding="async">
                     <div class="blog-card-content">
                         <h3>DEEJ - Open Source Hardware Mixer</h3>
                         <p>A couple of hours and you have a working volume controller for your apps</p>
@@ -648,21 +750,29 @@
         </div>
 
         <div class="footer">
-            <p><a href="#" onclick="showPage('home'); return false;">← back to home</a></p>
+            <p><a href="#home">← back to home</a></p>
         </div>
     </div>
 
     <script>
         function showPage(pageName) {
-            const pages = document.querySelectorAll('.page');
-            const links = document.querySelectorAll('.nav-link');
-            
-            pages.forEach(page => page.classList.remove('active'));
-            links.forEach(link => link.classList.remove('active'));
-            
-            document.getElementById(pageName).classList.add('active');
-            event.target.classList.add('active');
+            if (!document.getElementById(pageName)) pageName = 'home';
+
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.toggle('active', page.id === pageName);
+            });
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.toggle('active', link.dataset.page === pageName);
+            });
+            return pageName;
         }
+
+        function routeFromHash() {
+            showPage(location.hash.slice(1) || 'home');
+        }
+
+        window.addEventListener('hashchange', routeFromHash);
+        routeFromHash();
 
         function toggleTheme() {
             const html = document.documentElement;
@@ -671,9 +781,6 @@
             html.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
         }
-
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
     </script>
 </body>
 </html>

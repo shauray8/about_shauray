@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Making Qwen-Image generate in pixel space</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="Making Qwen-Image generate in pixel space">
+    <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Shauray Singh blog posts" />
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="main.css">
+
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+    <body>
+    <header class="site-header">
+  <div class="wrap">
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
+</header>
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>Making Qwen-Image generate in pixel space</h1>
+    <p class="meta">July 8, 2026</p>
+  </header>
+
+  <article class="post-content">
+  <style>
+    * {box-sizing: border-box;}
+    .gif-container {
+        max-width: 100%;
+        height: auto;
+    }
+    .gif-container img {
+        width: 100%;
+        height: auto;
+    }
+    .post-header h1 {
+        font-size: 35px;
+    }
+    .post pre,
+    .post code {
+        font-size: 13px;
+        background: none;
+        border: none;
+    }
+    .gif-row {
+      display: flex;
+      flex-wrap: nowrap;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+    }
+    .gif-row img {
+        max-width: 50%;
+        height: auto;
+    }
+    ul.eliminated li { margin-bottom: 2px; }
+</style>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/hero_samples.png" alt="pixel space qwen samples across the run" decoding="async">
+    <p class="caption">the same prompt and seed across the run, generated directly in pixel space (gen | gt)</p>
+</div>
+
+<p>
+The idea comes from the paper <a href="https://arxiv.org/abs/2510.10231">L2P: Unlocking Latent Potential for Pixel Generation</a>. Repo with this transferred to QWEN is <a href="https://github.com/shauray8/l2p_qwen_image">here</a>. I tried to follow the paper as closely as possible while transferring it to Qwen-Image-2512. A much wider model than Z-Image the paper uses, including the data generation and cleaning pipeline, with bits of the <a href="https://www.krea.ai/blog/flux-krea-open-source-release">KREA.1</a> blog mixed into the cleaning and curation. If you just want the gist - it looks good at 26k steps (paper suggests 100k), it plateaued into one specific unresolved artifact, and I ran out of credits before I could pull the last mile.
+</p>
+
+<h3>what L2P actually is, and why you'd want it</h3>
+<p>
+Latent diffusion models (Qwen-Image, Flux, Z-Image, all of them) don't generate pixels. They generate in the compressed latent space of a VAE, and then a VAE decoder blows that latent back up into an RGB image. That VAE is why latent diffusion is cheap, you denoise an 8&times; downsampled tensor instead of a full-res image. But it's also a ceiling. The VAE is lossy, it hallucinates its own texture, and everything the diffusion model learns is expressed through that fixed decoder. You inherit the VAE's failure modes whether you like them or not.
+<br><br>
+Pixel-space generation skips the VAE and denoises RGB directly. Historically this has been brutally expensive and hard, because pixels have no perceptual compression, the model has to come up with every high-frequency detail itself, and there's no free lunch from a pretrained decoder. That's the whole reason latent diffusion won in the first place.
+<br><br>
+L2P's insight is that you don't need to train a pixel model from scratch, you can unlock the pixel-generation ability inside an already trained latent DiT. The pretrained transformer already contains an enormous amount of visual prior, L2P keeps that frozen and only learns the thin machinery needed to read pixels in and write pixels out. Concretely:
+<ul>
+  <li>Freeze the entire DiT backbone. All the expensive pretrained knowledge stays exactly where it is.</li>
+  <li>Train only three things: the input projection (so the model can ingest raw pixels), the first and last <em>n</em> transformer blocks (to adapt the entry/exit representations), and a newly added <b>Detailer Head</b>, a small U-Net that consumes the DiT's feature map and emits the final high-frequency pixel prediction.</li>
+  <li>Keep the source model's exact training objective. For a rectified-flow / flow-matching model, that means predicting the velocity \(v = \epsilon - x_0\) under the same noise schedule the base model was trained with. You are staying inside the source model's optimization manifold, that's the entire trick.</li>
+</ul>
+The paper's headline: shallow tuning (~5 trainable layers) works, going deeper stagnates and degrades, because unconstrained updates to the deep layers wreck the pretrained priors. Keep it shallow, keep the middle frozen, let the Detailer Head do the heavy lifting on high-frequency reconstruction.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/l2p_samples.png" alt="L2P framework overview" loading="lazy" decoding="async">
+    <p class="caption">Overview of the L2P framework</p>
+</div>
+
+<p>
+One subtlety that matters enormously later: the Detailer Head does not output an image. It outputs velocity (\(\epsilon - x_0\)), same as the backbone. There is no <i>encode then decode an image</i> path in this design. I'll come back to why that quietly wrecked one of my debugging assumptions.
+</p>
+
+<h3>the overfit run</h3>
+<p>
+Before spending real money I did what everyone should do, a tiny overfit run to confirm the plumbing and the hyperparameters. The paper is vague on exact hyperparams outside the ablation tables, so I needed to confirm for myself.
+<br><br>
+A few choices here that diverge from the paper:
+<ul>
+  <li><b>6+6 blocks instead of 3+3.</b> The paper uses ~3 blocks each side on Z-Image. Qwen-Image is a wider and deeper model, so I scaled the trainable band proportionally: first 6 + last 6, leaving the deep middle frozen. My reasoning being proportionally this is roughly the same fraction of the network the paper touches, and 12 trainable of ~60 layers still leaves the priors intact. This actually performed better on my overfit runs.</li>
+  <li><b>Optimizer.</b> I tried Muon on the 2D attn/MLP weights with AdamW for embeddings, norm, and the decoder. It did not beat plain AdamW in my tests, probably because most of the work is being done by the Detailer Head, and Muon just doesn't finetune an Adam-pretrained model well.</li>
+</ul>
+From pure noise the overfit output is a little soft, and it plateaus after a while, training more on low noise steps pushes the plateau later but doesn't remove it. Good enough to confirm the hyperparameters are sane and the objective is wired correctly.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/overfit_samples.png" alt="overfit samples grid" loading="lazy" decoding="async">
+    <p class="caption">overfit samples grid (gen | gt)</p>
+</div>
+
+<p>
+This was enough to verify good hyperparams. Then the long, boring, actually-important part started: data.
+</p>
+
+<h3>data Collection</h3>
+<p>
+L2P's fast convergence depends on the training images being generated by <i>the same source model you're transferring</i>. The paper's ablation is unambiguous: source-model-generated data converges fastest and cleanest, cross-model data (images from a different generator) converges slower and to a worse ceiling, real/scraped data is worst of all, because the pixel model is being asked to fit a manifold that isn't its own prior's. This is the single highest leverage decision in the whole project and it's easy to get subtly wrong.
+<br><br>
+So all my training images are Qwen-Image generations, the model is learning to paint its own manifold in pixels, not somebody else's. Roughly 18k cleaned samples, mostly 1328&times;1328 area, resized to 1024 for this stage. The plan was always: get 1024 working, then finetune on full-res, then a 4K dataset for aesthetics.
+<br><br>
+The pipeline borrowed from the KREA.1 blog for cleaning and curating: dedup, quality filtering, aesthetic thresholds. I also kept 2&ndash;3 seeds of the same prompt for some samples to preserve a bit of diversity. Since I'm not touching the mid layers, prompt-level near-duplicates shouldn't collapse anything.
+<br><br>
+The raw and cleaned datasets are on HuggingFace:
+<ul>
+  <li><a href="https://huggingface.co/datasets/shauray/l2p-dataset">shauray/l2p-dataset</a></li>
+  <li><a href="https://huggingface.co/datasets/shauray/l2p-part0">shauray/l2p-part0</a></li>
+  <li><a href="https://huggingface.co/datasets/shauray/l2p-raw">shauray/l2p-raw</a></li>
+  <li>cleaned ~18k: <a href="https://huggingface.co/datasets/shauray/l2p-clean">shauray/l2p-clean</a></li>
+</ul>
+Data scale note from the paper: performance saturates past ~20k samples (big jump from 10k to 20k, diminishing returns after). 18k sits right in the sweet spot.
+</p>
+
+<h3>the transfer run</h3>
+<p>
+Training on spot instances, which meant compute came in fits and starts, finding H200s in the region I wanted, and finding spot there, was genuinely the hardest logistical part. I ran on Verda. The schedule ended up being a batch-size ramp as I got more GPUs: from 16 global to 32 to 64 (4&times;H200, BS 16 each), with LR 5e-5 on a cosine schedule.
+<br><br>
+The early curve looked healthy, loss dropped fast and flattened around ~0.85 by ~1.5&ndash;2k steps. And then, the samples looked structurally correct but drowned in high-frequency chroma grain. The composition was right, the subject was right, but the whole frame carried an RGB speckle that just would not go away, seemingly for thousands of steps.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/early_samples.png" alt="early transfer samples" loading="lazy" decoding="async">
+    <p class="caption">early transfer samples (gen | gt)</p>
+</div>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/mid_loss_psnr.png" alt="loss curve" loading="lazy" decoding="async">
+    <p class="caption">loss curve (stitched across spot restarts)</p>
+</div>
+
+<p>
+In flow-matching training the loss is an average over all noise levels and it saturates almost immediately. Most of the mass is at easy noise levels. Sample quality keeps climbing for a long time after the loss goes flat. The loss curve literally cannot tell you whether you're still improving in finetuning scenarios.
+<br><br>
+My <code>recon_psnr</code> was reading 7&ndash;9 dB and I assumed the model was broken. But 7&ndash;9 dB contradicting a visibly-correct structure is a metric bug, not a model bug, so never trust an LLM when it comes to writing evals and calculating these metrics. That pattern is the classic signature of a value-range mismatch (\([-1,1]\) vs \([0,1]\)) or scoring the noised generation against gt. When PSNR and your eyes disagree by that much, trust your eyes and audit the metric.
+<br><br>
+Also worth noting against the panic: the paper's own budget is 100k steps. At 7k I was at 7% of the reference run.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/mid_eval.png" alt="mid run panel" loading="lazy" decoding="async">
+    <p class="caption">loss, the broken recon PSNR, LR and the sigma distribution mid-run</p>
+</div>
+
+<h3>the debugging arc</h3>
+<p>
+Once I stopped eyeballing and started forming falsifiable hypotheses, the project turned into a proper bisection of the pipeline. Here's the sequence, including the dead ends, because the dead ends were most of the work.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/samples_mid.png" alt="mid run samples" loading="lazy" decoding="async">
+    <p class="caption">samples around 9.6k&ndash;11.6k, structure is right, the speckle is not going anywhere (gen | gt)</p>
+</div>
+
+<h4>Is it the sampler, or the model?</h4>
+<p>
+The residual grain had two possible sources: either the trajectory wasn't fully denoising (a sampling/schedule problem), or the Detailer Head genuinely couldn't produce clean high-frequency pixels (a capacity problem). To split them I ran a decoder recon test: feed clean gt through the head at low noise, no diffusion rollout, and measure how well it reconstructs.
+<br><br>
+Result: ~32 dB PSNR, LPIPS ~0.18, 1:1 copies of gt. The head is not the bottleneck, hand it good features and it reconstructs pixels perfectly. That killed the "widen the decoder" branch entirely.
+<br><br>
+But this test has a blind spot I didn't appreciate at the time: it's a single clean forward pass. It never runs the forward noising, never runs the multi-step sigma schedule, never round-trips the full trajectory. Anything that lives in those paths is invisible to it.
+</p>
+
+<h4>The sigma-truncation dead end</h4>
+<p>
+I tried "bias training toward low sigma" to attack the residual noise, but implemented it as a hard truncation to \(\sigma \in [0, 0.4]\). This made things worse: structure got mushier, because the input projection and first/last blocks stopped getting gradient on the high-noise regime that generation starts from. Bias the timestep distribution with a soft reweight, never a hard cut, you still need the whole range.
+</p>
+
+<h4>Instrumenting properly</h4>
+<p>
+At this point I finally built the thing I should have built at step 0 and not rely on an LLM to do that: a diagnostic pass logging per-channel grain statistics, normalization symmetry, noise unit-variance, sigma-distribution vs the target, and rollout LPIPS on a fixed prompt/seed set every N steps. If you take one thing from this post: build the honest eval harness before you start, not 15k steps in. The naked eye cannot resolve a 2k-step delta on an 800px thumbnail, and downscaling hides the exact grain you're trying to judge.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/eval_metrics_lpips.png" alt="diagnostic panel" loading="lazy" decoding="async">
+    <p class="caption">diagnostic panel</p>
+</div>
+
+<p>
+Here's a substantive one. My timestep distribution was sitting mostly in 0.3&ndash;0.7, centered ~0.5. That is, to three decimals, an un-shifted logit-normal(0,1). But Qwen-Image doesn't train like that.
+<br><br>
+Qwen-Image uses logit-normal timestep sampling <i>plus</i> a resolution-dependent exponential shift that biases sampling toward the noisier end, at native resolution it's equivalent to a linear shift of ~2.205, and the <code>FlowMatchEulerDiscreteScheduler</code> shift people run for Qwen at 1024 is ~3.16. The correct distribution for my setup should sit much higher, median ~0.75, fat tail toward 1, and on top of that, L2P itself wants a high noise bias for large patch pixel inputs (to stop the model cheating with trivial local reconstruction).
+<br><br>
+So I was training a flatter, more central noise distribution than the model I'm inheriting from was ever trained on, a direct violation of the "stay inside the source manifold" rule. Read the shift straight off the Qwen checkpoint's scheduler config and match it. Do not hardcode a number from a paper or a blog, read the ground truth from <code>use_dynamic_shifting</code>.
+</p>
+
+<h4>The one that actually fixed the visuals</h4>
+<p>
+Every "residual grain" sample up to this point was generated at the wrong guidance scale, effectively no CFG. A flow model sampled without its intended guidance produces exactly that washed-out, under-resolved, noisy look, and sharpens dramatically the moment you apply proper CFG.
+<br><br>
+Even better than bolting CFG onto inference: I added CFG dropout during training (randomly dropping the conditioning so the model actually learns an unconditional branch and responds to guidance properly). This was the single biggest visual jump in the entire project. Faces resolved, neon cleaned up, reflections sharpened. Below are sampled from the same step, same seed, just CFG ramped up to 4 rather than 0.
+</p>
+
+<div class="gif-row">
+    <img src="./assets/l2p_qwen/samples_1400_nocfg.png" alt="cfg 0" loading="lazy" decoding="async">
+    <img src="./assets/l2p_qwen/samples_1400_cfg.png" alt="cfg 4" loading="lazy" decoding="async">
+</div>
+<p class="caption">[cfg=0 | cfg=4], each pair is (gen | gt)</p>
+
+<p>
+Honestly, "what CFG are you sampling at?" should have been the first question anyone asked, including me. Many turns of treating an inference setting as a training defect.
+</p>
+
+<h4>Killing the terminal-SNR hypothesis</h4>
+<p>
+The last plausible "cheap fix" was terminal SNR, maybe the final sampling steps just weren't driving sigma close enough to zero, leaving residual noise in the bright regions. Just to rule things out I resampled a fixed seed pushing terminal sigma to 0.002 with extra tail steps.
+<br><br>
+Result: PSNR from 11.76 to 11.78, LPIPS 1.4025 to 1.4007. Nothing. Third-decimal noise. If the grain were leftover terminal noise, this would have visibly cleaned it. It didn't. So the residual is not the sampler stopping short.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/terminal_probe_samples_21390_f2793911cb35bd7fe9de_thumbnail_800.png" alt="base | tail | gt" loading="lazy" decoding="async">
+    <p class="caption">[base | tail | gt]</p>
+</div>
+
+<h3>where it stands at 26k</h3>
+<p>
+After the sigma-shift fix and the CFG/CFG-dropout change, the model is genuinely good. Composition, color, structure, mid-tones and shadows are close to the Qwen targets. The street scene, the steampunk portrait, the breakwater stonework, all there.
+</p>
+
+<center>
+    <img src="./assets/l2p_qwen/samples_26k_c.png" alt="samples at 26k" style="max-width:100%" loading="lazy" decoding="async">
+    <img src="./assets/l2p_qwen/samples_26k_b.png" alt="samples at 26k" style="max-width:100%" loading="lazy" decoding="async">
+    <img src="./assets/l2p_qwen/samples_26k.png" alt="samples at 26k" style="max-width:100%" loading="lazy" decoding="async">
+    <p class="caption">samples at 26k (gen | gt)</p>
+</center>
+
+<p>
+What's left is one specific, honest defect: a uniform high-frequency speckle sitting on top of an otherwise correct image, worst in bright flat regions (foam, fog, sky) but present everywhere including the shadows. And the metrics have gone flat across ~5k steps at a correct schedule and correct guidance.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/loss_final.png" alt="full run curves" loading="lazy" decoding="async">
+    <p class="caption">the full 26k-step run, stitched across spot restarts</p>
+</div>
+
+<p>
+Here's my read on what that plateau is, having eliminated everything else:
+<ul class="eliminated">
+  <li>It's not the sampler</li>
+  <li>It's not the channels or normalization</li>
+  <li>It's not the schedule</li>
+  <li>It's not guidance</li>
+  <li>It's not the Detailer Head's capacity</li>
+  <li>It's not data quantity or provenance</li>
+</ul>
+What's left is the objective. A pure flow/MSE-style loss converges to something spectrally smooth and provides almost no gradient signal for the very finest high-frequency texture, so the model leaves that band as residual speckle rather than resolving it into detail. This is exactly the ceiling the L2P authors flagged as their unexplored lever, and it's textbook pixel-space behavior. The indicated fix is a perceptual (LPIPS) loss term on the predicted \(x_0\), a small weight (~0.1) alongside the existing objective, which supplies gradient precisely in the high-frequency perceptual band that MSE ignores.
+<br><br>
+That is the clean next move. It's paper-endorsed, it's specifically indicated by every other branch being eliminated, and it's the one lever I haven't pulled.
+</p>
+
+<h3>the honest ending, and an ask</h3>
+<p>
+I had to stop the run at 26k steps because I ran out of compute credits. Not because it failed, the opposite. It's a genuinely-good 1024 pixel-space Qwen model sitting one well-identified lever away from resolving its last artifact, at ~26% of the paper's reference 100k budget. The finetune runs I always planned, full-res, then a 4K aesthetic pass, never got to start.
+<br><br>
+So, plainly: if you have compute credits to spare and you'd like to see this finished, I'd be very grateful. The immediate roadmap is concrete and cheap to verify: fix the LPIPS instrument, add the perceptual loss term, push toward the 100k budget, then the full-res and 4K finetunes. Everything is public, the code, the datasets, and this writeup. If you want to help with GPU time or credits, reach out please :)
+<br><br>
+I'll keep the repo and this post updated as (if) the run continues. Thanks for reading, and if you take one thing from a few weeks of my mistakes: build the honest eval harness first, and never trust a metric that disagrees with your own eyes.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/l2p_qwen/samples_across_spot.png" alt="samples across a couple thousand steps" loading="lazy" decoding="async">
+    <p class="caption">samples across a couple thousand steps</p>
+</div>
+
+<h3>Appendix / reproducibility notes</h3>
+<p>
+<ul>
+  <li><b>Source model:</b> Qwen-Image-2512. <b>Method:</b> L2P (frozen DiT + input-proj + first/last-6 blocks + Detailer Head). <b>Objective:</b> flow-matching velocity \(\epsilon - x_0\), Qwen-native shifted logit-normal schedule.</li>
+  <li><b>Data:</b> ~18k Qwen-generated images, ~1328&sup2; area, trained at 1024. <a href="https://huggingface.co/datasets/shauray/l2p-clean">shauray/l2p-clean</a>.</li>
+  <li><b>Optim:</b> AdamW, LR 5e-5. Batch ramp 16&rarr;32&rarr;64 global on 4&times;H200 (spot, Verda). CFG 4 at inference + CFG dropout in training.</li>
+  <li><b>Open problem at 26k:</b> uniform high-frequency residual; indicated fix = LPIPS term on predicted \(x_0\) (blocked on fixing the LPIPS eval range first).</li>
+</ul>
+Code: <a href="https://github.com/shauray8/l2p_qwen_image">shauray8/l2p_qwen_image</a>
+</p>
+
+<hr>
+    </body>
+</html>

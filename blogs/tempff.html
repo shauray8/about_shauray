@@ -2,6 +2,8 @@
 <html>
 
   <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Optimizing Qwen-Image-2512</title>
@@ -13,11 +15,21 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="main.css">
 
-    <!-- Syntax highlighting -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <script>hljs.highlightAll();</script>
+    <!-- Syntax highlighting (theme-aware, non-blocking) -->
+    <link rel="stylesheet" id="hl-light" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <link rel="stylesheet" id="hl-dark" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      window.syncCodeTheme = function (t) {
+        var l = document.getElementById('hl-light'), d = document.getElementById('hl-dark');
+        if (l && d) { l.disabled = (t === 'dark'); d.disabled = (t !== 'dark'); }
+      };
+      window.syncCodeTheme(document.documentElement.getAttribute('data-theme'));
+      window.addEventListener('DOMContentLoaded', function () { hljs.highlightAll(); });
+    </script>
 
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
 </head>
 
 
@@ -27,7 +39,8 @@
 
   <div class="wrap">
 
-    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
     
 </header>
 
@@ -109,7 +122,7 @@
     }
     .post pre,
     .post code {
-        background-color: #fcfcfc;
+        background-color: var(--code-bg);
         font-size: 13px; 
     }
     .gif-row {
@@ -130,19 +143,19 @@
         font-size: 14px;
     }
     th, td {
-        border: 1px solid #ccc;
+        border: 1px solid var(--border);
         padding: 6px 12px;
         text-align: left;
     }
     th {
-        background-color: #f6f8fa;
+        background-color: var(--table-head);
         font-weight: bold;
     }
 </style>
 
 
 <div class="gif-container">
-    <img src="./assets/qwen_optim/qwen_inference_optimizations.png" alt="optimization graph">
+    <img src="./assets/qwen_optim/qwen_inference_optimizations.png" alt="optimization graph" decoding="async">
     <center><p style="font-size:10px">Zoom in to see the inference times, it was a lot to condense already through the blog</p></center>
 </div>
 <p>
@@ -703,7 +716,7 @@ The Triton kernel isn't a standalone BF16→FP8 cast anymore it's absorbing the 
 After getting FP8+compile working, nsys gave us the per-step breakdown:
 <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; font-family: Arial, sans-serif;">
   <thead>
-    <tr style="background-color: #f2f2f2;">
+    <tr style="background-color: var(--table-head);">
       <th>Component</th>
       <th>ms/step</th>
       <th>%</th>

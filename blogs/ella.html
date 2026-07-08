@@ -3,6 +3,8 @@
 <html>
 
   <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>ELLA - Equip Diffusion Models with LLM for Enhanced Semantic Alignment</title>
@@ -33,7 +35,8 @@
 
   <div class="wrap">
 
-    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
     
 </header>
 
@@ -54,7 +57,7 @@
 }
 .post pre,
 .post code {
-    background-color: #fcfcfc;
+    background-color: var(--code-bg);
     font-size: 13px; /* make code smaller for this post... */
 }
 </style>
@@ -67,7 +70,7 @@
 
 <p>the architecture that followes all the changes is actually pretty neat and simple</p>
 
-<img src='./assets/ella_arch.png', width='100%'>
+<img src='./assets/ella_arch.png', width='100%' decoding="async">
 
 <p>Now, let's delve into the technical aspects of ELLA. The core of ELLA lies in the Timestep-Aware Semantic Connector (TSC), which is designed to extract timestep-dependent conditions from the pre-trained LLM at various denoising stages. The architecture of TSC is based on the resampler, and it instills temporal dependency by integrating the timestep in the Adaptive Layer Normalization. This design allows TSC to adapt semantics features over sampling time steps, effectively conditioning the frozen U-Net at distinct semantic levels.</p>
 
@@ -80,27 +83,27 @@ In conclusion, ELLA  equipping diffusion models with the power of Large Language
 
 <a href="#results"><p>Here are some experiments from my test runs </a><br><br> (vanilla SD15 (epic-realism and dark-sushi in some cases) | ELLA - fixed length | ELLA - flexible max length) </p>
 
-<img src='./assets/ella-inference-examples/A serene canine.png', width='100%'> 
+<img src='./assets/ella-inference-examples/A serene canine.png', width='100%' loading="lazy" decoding="async"> 
 <i>A serene canine amidst tall grass, a red collar contrasting its black fur, gazing into a stormy sky.</i>
-<img src='./assets/ella-inference-examples/croc.png', width='100%'> 
+<img src='./assets/ella-inference-examples/croc.png', width='100%' loading="lazy" decoding="async"> 
 <i>Crocodile in a sweater</i>
-<img src='./assets/ella-inference-examples/turtle-lizard.png', width='100%'> 
+<img src='./assets/ella-inference-examples/turtle-lizard.png', width='100%' loading="lazy" decoding="async"> 
 <i>A fantastical white turtle-lizard with a blue and pink shell, in a rocky habitat.</i>
-<img src='./assets/ella-inference-examples/red_book-yellow_vase.png', width='100%'> 
+<img src='./assets/ella-inference-examples/red_book-yellow_vase.png', width='100%' loading="lazy" decoding="async"> 
 <i>A red book and a yellow vase.</i>
-<img src='./assets/ella-inference-examples/red_book-yellow_vase-gpt4_refined_caption.png', width='100%'> 
+<img src='./assets/ella-inference-examples/red_book-yellow_vase-gpt4_refined_caption.png', width='100%' loading="lazy" decoding="async"> 
 <i>A vivid red book with a smooth, matte cover lies next to a glossy yellow vase. The vase, with a slightly curved silhouette, stands on a dark wood table with a noticeable grain pattern. The book appears slightly worn at the edges, suggesting frequent use, while the vase holds a fresh array of multicolored wildflowers.</i>
-<img src='./assets/ella-inference-examples/sanctuary.png', width='100%'> 
+<img src='./assets/ella-inference-examples/sanctuary.png', width='100%' loading="lazy" decoding="async"> 
 <i>An ethereal, inviting glass sanctuary beneath the Northern Lights.</i>
-<img src='./assets/ella-inference-examples/racoon_apple.png', width='100%'>
+<img src='./assets/ella-inference-examples/racoon_apple.png', width='100%' loading="lazy" decoding="async">
 <i>a racoon holding a shiny red apple over its head</i>
-<img src='./assets/ella-inference-examples/post-apocalyptic.png', width='100%'> 
+<img src='./assets/ella-inference-examples/post-apocalyptic.png', width='100%' loading="lazy" decoding="async"> 
 <i>An ominous, post-apocalyptic vision: Orange mushroom cloud over water, reflecting a starry sky.</i>
-<img src='./assets/ella-inference-examples/majestic_archway.png', width='100%'> 
+<img src='./assets/ella-inference-examples/majestic_archway.png', width='100%' loading="lazy" decoding="async"> 
 <i>An ethereal, starry vista with a majestic archway, ram's head, and serene mountainscape.</i>
-<img src='./assets/ella-inference-examples/racc.png', width='100%'> 
+<img src='./assets/ella-inference-examples/racc.png', width='100%' loading="lazy" decoding="async"> 
 <i>a mischievous raccoon standing on its hind legs, holding a bright red apple aloft in its furry paws. the apple shines brightly against the backdrop of a dense forest, with leaves rustling in the gentle breeze. a few scattered rocks can be seen on the ground beneath the raccoon's feet, while a gnarled tree trunk stands nearby.</i>
-<img src='./assets/ella-inference-examples/landscape_painting.png', width='100%'> 
+<img src='./assets/ella-inference-examples/landscape_painting.png', width='100%' loading="lazy" decoding="async"> 
 <i>An idyllic pink hued An idyllic pink hued landscape painting: Mountain range, river, green valley, purple flowers.: Mountain range, river, green valley, purple flowers.</i>
 <hr>
 <p><b> Now Here comes the intresting part right now it's just SD15 trained and realistically SDXL models are way better then SD15 based models and in I think the authors are working on training a version for SDXLs as well<br><br> until then I made ELLA part of a totally independent project (fork) from HuggingFace diffusers called Diffusers++ which is basically for diffusers community pipelines but maintained,<br><br> its still a little messy with little to no structure but here's a minimal PR <a href='https://github.com/ModelsLab/diffusers_plus_plus/pull/4'> https://github.com/ModelsLab/diffusers_plus_plus/pull/4 </a> that integrates ELLA with DIffusers++, migrates to newer phi3 which basically uses llama2 tokenizer and write a training script in order to train this for SDXL based models.</b> </p>

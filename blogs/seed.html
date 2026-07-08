@@ -2,6 +2,8 @@
 <html>
 
   <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Good Seed Makes a Good Crop</title>
@@ -23,6 +25,7 @@
       gtag('config', 'G-RLJ3MKG26H');
     </script>
 
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 
 
@@ -32,7 +35,8 @@
 
   <div class="wrap">
 
-    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
     
 </header>
 
@@ -53,7 +57,7 @@
 }
 .post pre,
 .post code {
-    background-color: #fcfcfc;
+    background-color: var(--code-bg);
     font-size: 13px; /* make code smaller for this post... */
 }
 </style>
@@ -98,17 +102,17 @@
 </ul>
 These seeds were identified through extensive experimentation and analysis from the authors. The FID score, where lower values indicate higher quality, highlights how the choice of seed can significantly affect the output quality.
 </p>
-<img src='./assets/graph_seed.png', width='100%'>
+<img src='./assets/graph_seed.png', width='100%' decoding="async">
 <h3>Seed and Intermediate Noise</h3>
 <p>
 An interesting facet of the seed's influence is its effect on intermediate noise levels during the reverse diffusion process. Our experiments and the experiments from the paper revealed that while the initial noise predominantly determines the final image, the noise added at each step, controlled by the seed, does not really affect the quality or has any substantial change in the final output.
 </p>
-<img src='./assets/seed_exp1.jpg', width='100%'>
+<img src='./assets/seed_exp1.jpg', width='100%' loading="lazy" decoding="async">
 <p style="font-size:11px; margin-top:-20px">we first set the seed to `i` and begin the reverse diffusion process. Then, at an intermediate timestep, we change the seed to `j` and complete the image generation process. We explore using seeds 0 and 1 for both `i` and `j`, as well as swapping the seed at early, mid, and late timesteps respectively of the reverse diffusion process. Despite these variations, we found that the initial noisy latent significantly controls the generated content, while the random noise introduced at intermediate reparameterization steps has no visible impact on the generated images</p>
 <h3>Visual Fingerprints: The Seeds' Distinguishing Marks</h3>
 <p>Each seed imprints a unique "visual fingerprint" on the generated images. The authors from the paper trained a 1,024-way classifier to predict the seed from an image with over 99.9% accuracy, demonstrating the distinct influence of seeds. This classifier revealed that even subtle variations in noise, dictated by the seed, result in distinguishable visual features. These findings suggest that seeds may encode unique visual features, prompting us to explore their impact across several interpretable dimensions</p>
 <p>The authors reduced the dimensions in order to better classify the seeds according to the features which resulted in some seeds giving certain features in the output i.e. having a frame around the image even though not prompted to, having a white sky instead of a blue sky, giving a grayscaled output etc.</p>
-<img src='./assets/seed_gray.png', width='100%'>
+<img src='./assets/seed_gray.png', width='100%' loading="lazy" decoding="async">
 <p style="font-size:11px; margin-top:-20px"> For more details and a detailed overview of all the methods and results mentioned go read the paper <a> https://arxiv.org/abs/2405.14828 </a></p>
 <h3>Applications: High-Fidelity Inference and Diversified Sampling</h3>
 <p>By identifying and leveraging "golden seeds," we can:

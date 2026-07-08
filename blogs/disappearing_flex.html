@@ -2,6 +2,8 @@
 <html>
 
   <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>The Disappearing Flex</title>
@@ -16,7 +18,8 @@
     <body>
     <header class="site-header">
   <div class="wrap">
-    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
 </header>
     <div class="page-content">
       <div class="wrap">
@@ -48,7 +51,7 @@
   </style>
 
 <!-- COVER PHOTO PLACEHOLDER - replace cover.jpg in assets/disappearing_flex/ -->
-<img class="cover-img" src="./assets/disappearing_flex/cover.png" alt="The Disappearing Flex - cover">
+<img class="cover-img" src="./assets/disappearing_flex/cover.png" alt="The Disappearing Flex - cover" decoding="async">
 
 <p>
 I've had this observation for a while now and I can't tell if it's fully true or if I just grew up and stopped seeing it. But ordinary men used to casually display strength all the time. Not gym rats, not athletes, just regular guys.

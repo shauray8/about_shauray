@@ -2,6 +2,8 @@
 <html>
 
   <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Krea-Realtime optims</title>
@@ -13,6 +15,7 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="main.css">
 
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 
 
@@ -22,7 +25,8 @@
 
   <div class="wrap">
 
-    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
     
 </header>
 
@@ -104,7 +108,7 @@
     }
     .post pre,
     .post code {
-        background-color: #fcfcfc;
+        background-color: var(--code-bg);
         font-size: 13px; 
     }
     .gif-row {
@@ -353,8 +357,8 @@ The _flash_attn_fwd function itself is a beast it's the core of FA4, handling ev
 <br>
 I see so much perf that I give up on nsys. I'll upload the nsys profile somewhere and link it here.
     <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/profile1.png" alt="Image 1" style="width: 100%; height: auto;">
-        <img src="./assets/krea_realtime/profile2.png" alt="Image 2" style="width: 100%; height: auto;">
+        <img src="./assets/krea_realtime/profile1.png" alt="Image 1" style="width: 100%; height: auto;" decoding="async">
+        <img src="./assets/krea_realtime/profile2.png" alt="Image 2" style="width: 100%; height: auto;" loading="lazy" decoding="async">
     </div>
 I started with untuned shapes no autotuning for tile sizes or clusters which meant the initial inference times actually increased compared to Flex Attention. The overhead from dynamic compilation and the custom mod added up, especially for Krea-Realtime's long sequences. But this was expected FA4 shines when tuned.
 <br>
@@ -364,10 +368,10 @@ I'm not good at prompting but here is V2V with all the above mentioned tricks an
 </p>
 <div class="img-comp-container">
         <div class="img-comp-img">
-            <img src="./assets/krea_realtime/v2vtestinit.gif" alt="Before GIF">
+            <img src="./assets/krea_realtime/v2vtestinit.gif" alt="Before GIF" loading="lazy" decoding="async">
         </div>
         <div class="img-comp-img img-comp-overlay">
-            <img src="./assets/krea_realtime/v2vgenerated.gif" alt="After GIF">
+            <img src="./assets/krea_realtime/v2vgenerated.gif" alt="After GIF" loading="lazy" decoding="async">
         </div>
     </div>
 
@@ -441,21 +445,21 @@ I'm not good at prompting but here is V2V with all the above mentioned tricks an
 <p>
 The denoising_loop dominates at 41%, which makes sense for an autoregressive video model it's the core sampling loop. Transformer steps (0-4) eat up another ~30% combined, with recompute_kv_cache at 16% highlighting the cost of our block-causal KV recomputation. VAE decode is minor (1.4%), but text encoding is quick.
     <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/nsys1.png" alt="Image 2" style="width: 100%; height: auto;">
+        <img src="./assets/krea_realtime/nsys1.png" alt="Image 2" style="width: 100%; height: auto;" loading="lazy" decoding="async">
     </div>
 
 cudaMemcpyAsync (78.3%) and cudaStreamSynchronize (18.5%) dominate lots of async copies and sync waits, likely from data movement in FA4 and KV cache. Kernel launches are cheap (1.4%), but mallocs add up.
 
     <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/nsys2.png" alt="Image 2" style="width: 100%; height: auto;">
+        <img src="./assets/krea_realtime/nsys2.png" alt="Image 2" style="width: 100%; height: auto;" loading="lazy" decoding="async">
     </div>
 
     <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/nsys3.png" alt="Image 2" style="width: 100%; height: auto;">
+        <img src="./assets/krea_realtime/nsys3.png" alt="Image 2" style="width: 100%; height: auto;" loading="lazy" decoding="async">
     </div>
 
     <div style=" justify-content: space-between; align-items: center; width: 100%; max-width: 800px; margin: 0 auto;">
-        <img src="./assets/krea_realtime/nsys4.png" alt="Image 2" style="width: 100%; height: auto;">
+        <img src="./assets/krea_realtime/nsys4.png" alt="Image 2" style="width: 100%; height: auto;" loading="lazy" decoding="async">
     </div>
 
 </p>

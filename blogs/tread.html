@@ -2,6 +2,8 @@
 <html>
 
   <head>
+<script>(function(){document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'dark')})();
+function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Tread</title>
@@ -23,6 +25,7 @@
       gtag('config', 'G-RLJ3MKG26H');
     </script>
 
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 
 
@@ -32,7 +35,8 @@
 
   <div class="wrap">
 
-    <a class="site-title" href="../index.html">We Must Know, We Will Know</a>
+    <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
+    <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
     
 </header>
 
@@ -53,7 +57,7 @@
 }
 .post pre,
 .post code {
-    background-color: #fcfcfc;
+    background-color: var(--code-bg);
     font-size: 13px; /* make code smaller for this post... */
 }
 </style>
@@ -119,7 +123,7 @@ The architecture emplyes smaller skips maybe to improve gradient flow during bac
 <br>
 </p>
 <p>
-<center><img src="./assets/tread.png" style="width:70%"></img></center>
+<center><img src="./assets/tread.png" style="width:70%" decoding="async"></img></center>
 When the route \(r_{i,j}\) is active, the tokens are bypassed by all intermediate layers it spans. Once the route completes, these tokens become available again, allowing layer \( D_\theta^{l_{j}}\) to receive information from layer \( D_\theta^{l_{i}}\). An interesting point from the paper is they hypothesize that the semantic importance of the noise space plays a crucial role. By repeatedly supplying information about \(x_{t}\) to the network, the learning of the noise-image mapping becomes more efficient. hence the route \(r_{0,j}\) in the above figure.
 <br><br>
 With this each route \(r_{i,j}\) decreases the computational cost along its length, as tokens are not involved in any computation up to their reintroduction but also increases the memory footprint as you will have to store the tokens up till reintroduction.
@@ -138,7 +142,7 @@ To address these objectives the paper prefers using a linear combination of \(x_
 </p>
 <h3>Leveraging Layer Similarities</h3>
 
-<img src="./assets/cossim-sana.png" style="width:100%"></img>
+<img src="./assets/cossim-sana.png" style="width:100%" loading="lazy" decoding="async"></img>
 <center><p style="font-size:12px">
 The above figure represents cosine similarities between Sana transformer blocks and SD3.5L Joint transformer blocks. <br>
   </p></center>
@@ -182,13 +186,13 @@ where \(N\) denotes the total number of sequential routes employed.
 </p>
 
 <h3>Conclusion: The Magic of Routes</h3>
-<img src="./assets/conc.png" style="width:100%"></img>
+<img src="./assets/conc.png" style="width:100%" loading="lazy" decoding="async"></img>
 <p>
 The paper mentions all the training strategies benchmarking on ImageNet-1K, which is a good PoC but they did not evaluate with the same setup, but hey it's legit lab though I feel there method has to be very sensitive to the hyperparameters, including masking rate and loss weighting, I would recomend going through there setup mentioned an the paper. Just mentioning the interesting things here starting off with FID score comparisons accross the paper. 
-<img src="./assets/table-tread.jpg" style="width:100%"></img>
+<img src="./assets/table-tread.jpg" style="width:100%" loading="lazy" decoding="async"></img>
 
 I don't really like how they mention DiT all over the paper and the Implementation details are for training EDM ! anyways on that they ensure that the first route starts at \(D_\theta^{l_{0}}\) to maximize the potential length of route \(r\) spans. Now comparing pruning/ masking and routing, where both the approches would remove tokens in one way or the other routing forces you to use all the tokens merely witholding them from some computational blocks.
-<img src="./assets/prun-tread.png" style="width:100%"></img>
+<img src="./assets/prun-tread.png" style="width:100%" loading="lazy" decoding="async"></img>
 All in all an interesting read though still requires a full scale test should be exiting experimenting with SANA ;), here's there codebase <a href="https://github.com/CompVis/tread">CompVis/tread</a>. 
 </p>
 <hr>
