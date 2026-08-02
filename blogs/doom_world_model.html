@@ -6,9 +6,9 @@
 function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-theme')==='dark'?'light':'dark';h.setAttribute('data-theme',n);localStorage.setItem('theme',n);if(window.syncCodeTheme)window.syncCodeTheme(n)}</script>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>How to train and serve a playable doom world model</title>
+    <title>Training and serving a world model that plays doom</title>
     <meta name="viewport" content="width=device-width">
-    <meta name="description" content="How to train and serve a playable doom world model">
+    <meta name="description" content="Training and serving a world model that plays doom">
     <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Shauray Singh blog posts" />
 
     <!-- Custom CSS -->
@@ -36,14 +36,20 @@ function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-the
   <div class="wrap">
     <a class="site-title" href="../index.html#blogs">We Must Know, We Will Know</a>
     <button class="theme-toggle" onclick="toggleTheme()">◐ theme</button>
+  </div>
 </header>
     <div class="page-content">
       <div class="wrap">
       <div class="post">
 
   <header class="post-header">
-    <h1>How to train and serve a playable doom world model</h1>
-    <p class="meta">August 1, 2026</p>
+    <h1>Training and serving a world model that plays doom</h1>
+    <p class="meta">August 2, 2026</p>
+    <p class="authors">
+      <a href="https://x.com/Shauray7">Shauray</a>
+      <a href="https://x.com/TanmayPatil79">Tanmay</a>
+      <a href="https://x.com/edwixxxx">Anurag</a>
+    </p>
   </header>
 
   <article class="post-content">
@@ -82,6 +88,15 @@ function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-the
         height: auto;
     }
     .post-content table { width: 100%; }
+    .post-header .authors {
+        font-size: 15px;
+        margin-top: 8px;
+    }
+    .post-header .authors a {
+        white-space: nowrap;
+        margin-right: 18px;
+    }
+    .post-header .authors a:last-child { margin-right: 0; }
     ul.eliminated li { margin-bottom: 2px; }
 </style>
 
@@ -93,27 +108,28 @@ function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-the
 </div>
 
 <p>
-there is no WAD file, no zdoom source port, no game state anywhere. When you press W, nothing moves a player entity though a map, because there is no map, its a 1.2 billion parameter diffusion transformer that denoises a latent, a decoder turns it into pixels, and those pixels happen to look exactly like you moved forward in Doom because that's the most likely thing to follow the frames it has already seen, given that you pressed W.
+there is no WAD file, no zdoom source port, no game state anywhere. When you press W, nothing moves a player entity through a map, because there is no map, it's a 1.2 billion parameter diffusion transformer that denoises a latent, a decoder turns it into pixels, and those pixels happen to look exactly like you moved forward in Doom because that's the most likely thing to follow the frames it has already seen, given that you pressed W.
 <br><br>
-the model hallucinates plausible consequences of your inputs, and it is startlingly good at it, but rendering a world is not the same thing as running a game with rules.
+the model hallucinates plausible consequences of your inputs, and it is startlingly good at it, but rendering a world is not the same thing as running a game with rules. In here I'll go over the training and the inference for such models on probably the worst case that a WM can be used for but it's nice to learn how these things work.
 <br><br>
-for more on what is a world model read this great write up - <a href="https://x.com/DereWah/status/2082188592055537965">https://x.com/DereWah/status/2082188592055537965</a>
+for more on what is a world model read this great write up by Davide Locatelli
+on X - <a href="https://x.com/DereWah/status/2082188592055537965">Everyone says "world model." Almost nothing is one.</a>
 </p>
 
 <h3>A little section on MIRA</h3>
 <p>
-MIRA (General Intuition / Kyutai / Epic, <a href="https://github.com/general-intuition/mira">code</a>) is a multiplayer interactive world model with a frozen DINOv3 representation autoencoder turns video into latents, and a latent diffusion transformer generates the next frame from past frames plus player actions. The released 5B model plays 4 player Rocket League at 20 FPS on one GPU, the architecture is unchanged in everything below, so read the paper for it. What I built is everything around it and wherever a specific architectural detail matters downstream (a resolution constraint, frames-per-latent, per-frame noise levels), I flag it at the point of use. Though I would highly recommend going through there project page for better understanding.
+MIRA (General Intuition / Kyutai / Epic, <a href="https://github.com/mira-wm/mira">code</a>) is a multiplayer interactive world model where a frozen DINOv3 representation autoencoder turns video into latents, and a latent diffusion transformer generates the next frame from past frames plus player actions. The released 5B model plays 4 player Rocket League at 20 FPS on one GPU, the architecture is unchanged in everything below, so read the paper for it. What I built is everything around it and wherever a specific architectural detail matters downstream (a resolution constraint, frames-per-latent, per-frame noise levels), I flag it at the point of use. Though I would highly recommend going through their project page for better understanding.
 </p>
 
 <h3>The data adapter</h3>
 <p>
-Data used to train the thing lives <a href="https://huggingface.co/datasets/chrisxx/doom-2players-mp4">here</a> with ~2,600 deathmatch episodes, ~167 h, ~21M frames at 480&times;640 @ 35 fps, two synchronised perspectives per episode. I did have to chunk the episodes at 160 frames a length divisible by both the 40-frame single-player and 80-frame multiplayer clips, so no frames get stranded.
+Data used to train the thing lives <a href="https://huggingface.co/datasets/chrisxx/doom-2players-mp4">here</a> with ~2,600 deathmatch episodes, ~167 h, ~21M frames at 480&times;640 @ 35 fps, two synchronised perspectives per episode. I did have to chunk the episodes at 160 frames, a length divisible by both the 40-frame single-player and 80-frame multiplayer clips, so no frames get stranded.
 <br><br>
 The decision that matters most is the action mapping. Doom's 14-dim action vector becomes 13 binary key channels plus one continuous mouse-turn channel. That defines the input distribution the model expects at play time.
 <br><br>
-Resolution is 384&times;512 and the frame rate stays 35, end to end. 384&times;512 keeps Doom's 4:3 instead of squashing it, and skips the token tax of native res. 35 to 20 fps isn't an integer stride, so nothing gets retargeted which is also why "real time" later means 17.5 model steps a second, not 35 frames.
+Resolution is 384&times;512 and the frame rate stays 35, end to end. 384&times;512 keeps Doom's 4:3 instead of squashing it, and skips the token tax of native res. 35 to 20 fps isn't an integer stride, so nothing gets retargeted, which is also why "real time" later means 17.5 model steps a second, not 35 frames.
 <br><br>
-this was trained on a strided subset, not a prefix. At this budget the constraint is training steps, not data 160 of the 1,320 shards is already far more clips than the run will ever see but take every 8th shard, not the first 160, so the subset spans the whole capture instead of one slice of it.
+this was trained on a strided subset, not a prefix. At this budget the constraint is training steps, not data, 160 of the 1,320 shards is already far more clips than the run will ever see. But take every 8th shard, not the first 160, so the subset spans the whole capture instead of one slice of it.
 </p>
 
 <h3>The overfit run</h3>
@@ -135,9 +151,9 @@ Before spending any real money I did what everyone should do, overfit both stage
 <p>
 The order is forced by the architecture, codec first because the world model trains on the frozen codec's latents, then the single player world model, then a multiplayer warm start if the budget allows it (spoiler it did not). The codec is per-frame reconstruction, so it's data efficient, a diverse slice of the episodes is plenty. The world model is where scale matters, and it gets everything, each of the two perspectives becomes its own training row, so 167 hours of matches becomes about 334 hours of single player clips.
 <br><br>
-Most of the details on this is better readable on the training code itself here <a href="https://github.com/shauray8/mira-doom">https://github.com/shauray8/mira-doom</a>, there was nothing crazy just following the MIRA recipe changing a few stuff here and there.
+Most of the details on this are better read off the training code itself, here <a href="https://github.com/shauray8/mira-doom">https://github.com/shauray8/mira-doom</a>, there was nothing crazy just following the MIRA recipe changing a few things here and there.
 <br><br>
-A little caveat on the codec - The codec's loss terms are auto weight balanced, so the total deliberately isn't a clean signal the reconstruction metrics are. Game frames plateau in the low 30s dB, and once PSNR stops moving for a handful of straight validations the codec is done and the world model should get the remaining compute, I mean if I had more budget I would sure as hell train the codec a little more but I had to balance it out on the wm, this does bite me in the ass later though.
+A little caveat on the codec - The codec's loss terms are auto weight balanced, so the total deliberately isn't a clean signal, the reconstruction metrics are. Game frames plateau in the low 30s dB, and once PSNR stops moving for a handful of straight validations the codec is done and the world model should get the remaining compute, I mean if I had more budget I would sure as hell train the codec a little more but I had to balance it out on the wm, this does bite me in the ass later though.
 </p>
 
 <div class="gif-row">
@@ -153,7 +169,7 @@ A little caveat on the codec - The codec's loss terms are auto weight balanced, 
 
 <h3>Drift</h3>
 <p>
-Every frame the model generates becomes context for the next one through the KV-cache. A slightly off frame becomes the premise for the next one, the error grows, and a few seconds into an open loop rollout the world wanders off-distribution. Measured PSNR against a reference trajectory falls from about 30 dB to about 18 over 60 generated frames. The model isn't "broken" when this happens it's doing exactly what an autoregressive model does with imperfect inputs.
+Every frame the model generates becomes context for the next one through the KV-cache. A slightly off frame becomes the premise for the next one, the error grows, and a few seconds into an open loop rollout the world wanders off-distribution. Measured PSNR against a reference trajectory falls from about 30 dB to about 18 over 60 generated frames. The model isn't "broken" when this happens, it's doing exactly what an autoregressive model does with imperfect inputs.
 <br><br>
 Retraining to fix drift was not on the table at this budget, so everything below is inference time. The property that makes inference time control possible is diffusion forcing itself, the model was trained with an independent noise level per context frame, so it's robust to noisy context by construction.
 <br><br>
@@ -169,14 +185,14 @@ Then the serving pass in the next section bought enough speed to run 6 diffusion
 
 <h3>Soft re-anchoring</h3>
 <p>
-Instead of clearing the cache and reseeding from a different real clip (kills drift instantly, but the scene visibly jumps), re-ground the model to its own current frame decode the latest latent to pixels, re-encode it through the frozen codec, rebuild the context from that. nothing special here the codec is deterministic, so the round trip snaps the latent back onto the valid manifold without changing the visible scene. One round trip every couple of seconds is enough.
+Instead of clearing the cache and reseeding from a different real clip (kills drift instantly, but the scene visibly jumps), re-ground the model to its own current frame: decode the latest latent to pixels, re-encode it through the frozen codec, rebuild the context from that. nothing special here, the codec is deterministic, so the round trip snaps the latent back onto the valid manifold without changing the visible scene. One round trip every couple of seconds is enough.
 <br><br>
-A shorter context window evicts drifted frames sooner at the cost of forgetting what is behind you, smooth inputs genuinely help, because frantic action changes push the model to extrapolate, and extrapolation drifts faster.
+A shorter context window evicts drifted frames sooner, at the cost of forgetting what is behind you. Smooth inputs genuinely help too, because frantic action changes push the model to extrapolate, and extrapolation drifts faster.
 </p>
 
 <h3>Step budget</h3>
 <p>
-On the inference I did do a 2 to 8 step pass to see which gives me the best quality to fps ratio and to my surprise 8 steps was measured to perform worst in this case then 6. At the same context noise, the 6-step rollout's HUD survives the full 150-step horizon while the 8 step one breaks before the halfway mark, and 8 also misses the frame budget, so the game runs in slight slow motion on top. My working hypothesis is that longer denoising trajectories at low context noise commit small errors into the latent with more confidence, and autoregression does the rest. Convenient either way 6 is both the fastest setting inside the frame budget and the best scoring one, so there is no trade to make.
+On inference I did a 2 to 8 step sweep to see which gives me the best quality to fps ratio, and to my surprise 8 steps was measured to perform worse in this case than 6. At the same context noise, the 6-step rollout's HUD survives the full 150-step horizon while the 8 step one breaks before the halfway mark, and 8 also misses the frame budget, so the game runs in slight slow motion on top. My working hypothesis is that longer denoising trajectories at low context noise commit small errors into the latent with more confidence, and autoregression does the rest. Convenient either way, 6 is both the fastest setting inside the frame budget and the best scoring one, so there is no trade to make.
 </p>
 
 <div class="gif-container">
@@ -186,18 +202,18 @@ On the inference I did do a 2 to 8 step pass to see which gives me the best qual
 
 <h3>Serving the model</h3>
 <p>
-A naive inference pipeline ran at about 1fps, though towards the end of this section it'll jump to about 35fps on a 5090, and that too cause the data caps out at 35fps.
+A naive inference pipeline ran at about 1fps, though towards the end of this section it'll jump to about 35fps on a 5090, and that's only because the data caps out at 35fps.
 <br><br>
-One GPU worker thread owns the model, the KV-cache and the CUDA graph. Warmup, capture and every step on the same thread, since graphs can't be replayed from a different thread than captured. The worker generates continuously from the current action and the handler returns the latest finished frame. The original design generated per request, which is the 1 fps. JPEG encoding is on-GPU, so frames leave as tens of KB rather than a ~600KB pixel copy. <code>gc.freeze()</code> after warmup, because GC pauses were dropping the frame rate to single digits.
+One GPU worker thread owns the model, the KV-cache and the CUDA graph. Warmup, capture and every step on the same thread, since graphs can't be replayed from a different thread than captured. The worker generates continuously from the current action and the handler returns the latest finished frame. The original design generated per request, which is where the 1 fps came from. JPEG encoding is on-GPU, so frames leave as tens of KB rather than a ~600KB pixel copy. <code>gc.freeze()</code> after warmup, because GC pauses were dropping the frame rate to single digits.
 <br><br>
 The lever from about 11 fps to 24 is a manual <code>torch.cuda.CUDAGraph</code> around the whole step. <code>torch.compile</code> cannot take the denoiser (it has data-dependent control flow), and the stock streaming path grows its KV-cache with a <code>torch.cat</code> every step, which is fatal when a graph replays against fixed memory addresses. So the steady state step is reimplemented with four invariants:
+</p>
 <ul>
   <li>the latent and the KV-cache live in fixed buffers updated in place, roll and copy, never reallocate.</li>
   <li>all randomness comes from static noise buffers filled outside the graph, otherwise the graph replays identical noise and the picture freezes.</li>
   <li>only the steady-state path is captured, with a short warmup pre-populating the cache so the first call branch never runs inside the graph.</li>
   <li>and the model's two ugly realities are handled explicitly, meaning the empty cache slots of the non-temporal layers and the bf16/fp32 autocast boundary at the decoder.</li>
 </ul>
-</p>
 
 <h4>Frame breakdown</h4>
 <table>
@@ -245,9 +261,9 @@ Now look at what that call computes. Attention takes a softmax over the query's 
 </code></pre>
 
 <p>
-So the layer projects q and k, launches a full attention kernel, runs the entire online softmax machinery, and hands back a copy of a tensor it was already holding. And the kernel cannot know any of this. It is the general cutlass memory-efficient kernel, built for long sequences, and at the decoder's shape (768 batch, 16 heads, head_dim 72) it tiles the degenerate case terribly: about 375 microseconds a call, against 3.8 for a straight copy of v. Charged in all 28 blocks on every decode, this provable no-op was eating a fifth of the frame.
+So the layer projects q and k, launches a full attention kernel, runs the entire online softmax machinery, and hands back a copy of a tensor it was already holding. And the kernel cannot know any of this. It is the general cutlass memory-efficient kernel, built for long sequences, and at the decoder's shape (768 batch, 16 heads, head_dim 72) it tiles the degenerate case terribly: about 375 microseconds a call, against 3.8 microseconds for a straight copy of v. Charged in all 28 blocks on every decode, this provable no-op was eating a fifth of the frame.
 <br><br>
-The fix is a guard inside <code>attend()</code> when the query and key lengths are both 1, skip the kernel and return v. The one wrinkle is GQA. Where the KV head count is smaller than the query head count, returning v means broadcasting each KV head across its group of query heads first, which is exactly what the kernel's output would have contained anyway. The short circuit is verified bit-identical against the SDPA reference across head counts, GQA ratios, and both causal settings. Decode drops from 30 to 19.4ms, and the frame from 47.3 to 37ms.
+The fix is a guard inside <a href="https://github.com/shauray8/mira-doom/blob/d7a0e19ed7444633bd9cd2bbee8aa04523ddb061/src/mira/ml/flash_attention.py#L106"><code>attend()</code></a>: when the query and key lengths are both 1, skip the kernel and return v. The one wrinkle is GQA. Where the KV head count is smaller than the query head count, returning v means broadcasting each KV head across its group of query heads first, which is exactly what the kernel's output would have contained anyway. The short circuit is verified bit-identical against the SDPA reference across head counts, GQA ratios, and both causal settings. Decode drops from 30 to 19.4ms, and the frame from 47.3 to 37ms.
 <br><br>
 The second no-op is a mask. With one query and unbounded context, the causal mask is entirely true, so it constrains nothing. But passing any explicit mask knocks SDPA off its flash and cuDNN backends and onto the slow cutlass path, and that is the shape every streaming step uses, on all five of the DiT's temporal-attention layers, on every diffusion step. Skipping the mask when it is vacuous (a bounded window is a real mask and still gets built) agrees with the masked reference to one bf16 ULP and is worth about 6ms a step.
 </p>
@@ -256,14 +272,14 @@ The second no-op is a mask. With one query and unbounded context, the causal mas
 <p>
 What remained in the decoder was about 1,700 tiny kernels per decode at 2 to 4 ms each, which is launch overhead bound, and launch overhead is exactly where Inductor shines. It gets <code>max-autotune-no-cudagraphs</code>, and that suffix is required because Inductor's own cudagraph wrapper fights the manual graph. Decode drops again, from 19ms to under 9ms.
 <br><br>
-For the DiT we already have cuda graphs so compile wont do any good here, the graph already removed the launch overhead.
+For the DiT we already have cuda graphs so compile won't do any good here, the graph already removed the launch overhead.
 </p>
 
-<h4>two frames per step</h4>
+<h4>Two frames per step</h4>
 <p>
 The codec decodes one latent step into two consecutive video frames, and the serving loop was keeping one and discarding the other, a frame the decoder had already paid for. Publishing both doubles the delivered frame rate for zero compute. The most embarrassing fix in this post, and the most fps per line changed.
 <br><br>
-with this generating flat out is the wrong target. Each step advances two frames of a 35 fps game, so real time is 17.5 steps per second, a 57ms budget, and exceeding it runs the world in fast-forward. The worker paces to that grid, absorbing slow steps into the next slot and resyncing rather than sprinting if it falls behind.
+with this, generating flat out is the wrong target. Each step advances two frames of a 35 fps game, so real time is 17.5 steps per second, a 57ms budget, and exceeding it runs the world in fast-forward. The worker paces to that grid, absorbing slow steps into the next slot and resyncing rather than sprinting if it falls behind.
 </p>
 
 <h4>Reseeding between sessions</h4>
@@ -272,7 +288,7 @@ Reseeding used to invalidate the CUDA graph, so a reset meant a 30-second recapt
 <br><br>
 The most instructive bugs of the project were small ones sprinkled around the inference path, and every fix came from going back to look at the training data rather than the model. The clearest case: weapon select did nothing, and the model was fine. The client latched a weapon bit on forever once pressed, but in the training split a weapon press is a hold of a couple of frames and exactly one weapon is ever set at a time, so the client was feeding the model a distribution it had never seen. The fixes all followed from the measurements: hold durations are expressed in model steps rather than client frames, because the browser samples at 60 Hz while the model consumes 17.5 actions a second, and mouse movement accumulates between steps instead of being drained once per step, which had been discarding most of every flick.
 <br><br>
-Also since I was on a 5090 you could go all fancy with sage attn and stuff but for my usecase I had a 35fps cap from the dataset and for inference here frame rate is not the bottleneck anyway.
+Also, since I was on a 5090 you could go all fancy with sage attn and stuff, but for my usecase I had a 35fps cap from the dataset, and for inference here frame rate is not the bottleneck anyway.
 </p>
 
 <div class="gif-container">
@@ -282,11 +298,11 @@ Also since I was on a 5090 you could go all fancy with sage attn and stuff but f
 
 <h3>Episodic memory</h3>
 <p>
-While working on the memory problem I saw Avik Sethia's <a href="https://aviksethia.com/blogs/worldkv">WorldKV</a> post, and to understand the method properly, go read that. Here is only what it did on my use case.
+While working on the memory problem I saw Avik Sethia's <a href="https://x.com/sethia_avik/status/2079944358758166938">WorldKV</a> post, and to understand the method properly, go read that. Here is only what it did on my use case.
 <br><br>
 The window is 19 latent frames, about a second of gameplay, and anything older is not attenuated, it is dropped, so when you turn back into a room the model re-invents it. I archived the KV of evicted frames in a bank keyed by pose (dead-reckoned from the mouse-turn channel, since Doom has no camera pose, with one turn unit calibrated to almost exactly a degree) and swapped the best matches into a reserved slice of the window every step, no retraining, no window growth, and RoPE is applied after cache concatenation so a retrieved frame adopts its new slot's position for free.
 <br><br>
-For tests I just looked away, dwell for double the window, looked back, and score consistency with the pre-turn view. Retrieval did its half perfectly, the right frames were found and inserted every time, and the model ignored them: return-consistency with memory on sat within noise of memory off at its best configuration, decayed back to baseline as I reserved more slots, and in a separate run the sign flipped entirely.
+For tests I just looked away, dwelled for double the window, looked back, and scored consistency with the pre-turn view. Retrieval did its half perfectly, the right frames were found and inserted every time, and the model ignored them: return-consistency with memory on sat within noise of memory off at its best configuration, decayed back to baseline as I reserved more slots, and in a separate run the sign flipped entirely.
 <br><br>
 The reason is structural, not retrieval. Retrieved frames land at the oldest RoPE positions, where fifteen or more contiguous recent frames outvote them, and every reserved slot costs a working-memory slot one for one, so giving it more memory meant giving it a worse present, which is exactly the decay the slot sweep shows. WorldKV's own setting runs an eight-second window where retrieved chunks displace a small share of the context, at a one-second window the trade costs too much.
 </p>
@@ -305,19 +321,24 @@ The reason is structural, not retrieval. Retrieved frames land at the oldest RoP
 Trained on 2&times;H100 under a very tight budget. Codec early-stopped on PSNR plateau. Single-player world model 75k steps. Long-context finetune 13k. Paper-scale reference is 60k / 250k / 40k.
 <br><br>
 Serving on a single 5090: 6 diffusion steps, context noise 0, 19 context latents, step from 47 to 29ms, 35 fps paced, VRAM 15.7GB.
+<br><br>
+<b>Checkpoints:</b> <a href="https://huggingface.co/shauray/mira-doom">shauray/mira-doom</a>. <b>Code:</b> <a href="https://github.com/shauray8/mira-doom">shauray8/mira-doom</a>.
 </p>
 
 <h3>References</h3>
-<p>
 <ul>
-  <li>MIRA: Multiplayer Interactive World Models with Representation Autoencoders and the <a href="https://github.com/general-intuition/mira">code</a></li>
+  <li>MIRA: Multiplayer Interactive World Models with Representation Autoencoders and the <a href="https://github.com/mira-wm/mira">code</a></li>
   <li><a href="https://huggingface.co/datasets/chrisxx/doom-2players-mp4">https://huggingface.co/datasets/chrisxx/doom-2players-mp4</a>, the dataset</li>
-  <li>DINOv3 (gated codec encoder weights)</li>
-  <li>WorldKV / episodic memory for real-time world models, the inspiration for the memory experiment</li>
+  <li><a href="https://github.com/facebookresearch/dinov3">DINOv3</a> (gated codec encoder weights)</li>
+  <li><a href="https://x.com/sethia_avik/status/2079944358758166938">WorldKV</a> / episodic memory for real-time world models, the inspiration for the memory experiment</li>
   <li><a href="https://github.com/shauray8/mira-doom">https://github.com/shauray8/mira-doom</a>, code for doom inference</li>
+  <li><a href="https://huggingface.co/shauray/mira-doom">https://huggingface.co/shauray/mira-doom</a>, the trained checkpoints</li>
 </ul>
-</p>
 
 <hr>
+  </article>
+      </div>
+      </div>
+    </div>
     </body>
 </html>
