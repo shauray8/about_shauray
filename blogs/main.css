@@ -507,3 +507,31 @@ hr { border: 0; border-top: 1px solid var(--border); }
     margin: 0 0 15px; }
 
 }
+
+/* Small screens: keep wide content from widening the whole page.
+   Tables, long identifiers and display math have a min-content width
+   larger than a phone viewport, which otherwise forces the body to
+   scroll sideways and throws the whole layout off. */
+@media screen and (max-width: 700px) {
+
+  .post-content table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .post-content code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .post-content a { overflow-wrap: anywhere; }
+
+  mjx-container[display="true"] {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+}

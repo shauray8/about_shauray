@@ -290,15 +290,14 @@ I'll keep the repo and this post updated as (if) the run continues. Thanks for r
 </div>
 
 <h3>Appendix / reproducibility notes</h3>
-<p>
 <ul>
   <li><b>Source model:</b> Qwen-Image-2512. <b>Method:</b> L2P (frozen DiT + input-proj + first/last-6 blocks + Detailer Head). <b>Objective:</b> flow-matching velocity \(\epsilon - x_0\), Qwen-native shifted logit-normal schedule.</li>
   <li><b>Data:</b> ~18k Qwen-generated images, ~1328&sup2; area, trained at 1024. <a href="https://huggingface.co/datasets/shauray/l2p-clean">shauray/l2p-clean</a>.</li>
   <li><b>Optim:</b> AdamW, LR 5e-5. Batch ramp 16&rarr;32&rarr;64 global on 4&times;H200 (spot, Verda). CFG 4 at inference + CFG dropout in training.</li>
   <li><b>Open problem at 26k:</b> uniform high-frequency residual; indicated fix = LPIPS term on predicted \(x_0\) (blocked on fixing the LPIPS eval range first).</li>
+  <li><b>Weights:</b> <a href="https://huggingface.co/shauray/l2p-ckpts">shauray/l2p-ckpts</a>.</li>
+  <li><b>Code:</b> <a href="https://github.com/shauray8/l2p_qwen_image">shauray8/l2p_qwen_image</a>.</li>
 </ul>
-Code: <a href="https://github.com/shauray8/l2p_qwen_image">shauray8/l2p_qwen_image</a>
-</p>
 
 <hr>
     </body>
