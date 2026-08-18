@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 380" role="img"
+           aria-label="Stack diagram of maiku's dispatch layers. L2b, maiku dot ops and dispatch, calls L1 directly. L2a, the flat maiku kernel namespace, is L1's registration point. L1, torch dot ops dot maiku, launches L0, the cuTile kernel. A dashed forbidden edge shows L2b never calls L0 directly.">
+  <rect x="0" y="0" width="760" height="380" fill="#12151c"/>
+
+        <defs>
+          <marker id="a3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#d7dce6"></path>
+          </marker>
+          <marker id="a3r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#d95555"></path>
+          </marker>
+        </defs>
+
+        <!-- L2b -->
+        <rect x="30" y="16" width="560" height="58" rx="8" fill="#9d6eb5" fill-opacity="0.14" stroke="#9d6eb5" stroke-width="1.6"></rect>
+        <text x="50" y="40" font-size="13" fill="#d7dce6">L2b: <tspan font-family="ui-monospace,monospace" font-size="12">maiku.ops.*</tspan> / dispatch</text>
+        <text x="50" y="58" font-size="10.5" fill="#d7dce6" fill-opacity="0.7">best backend for these inputs, ~5 names, torch fallback</text>
+
+        <!-- L2a -->
+        <rect x="30" y="118" width="560" height="58" rx="8" fill="#45b5a5" fill-opacity="0.14" stroke="#45b5a5" stroke-width="1.6"></rect>
+        <text x="50" y="142" font-size="13" fill="#d7dce6">L2a: <tspan font-family="ui-monospace,monospace" font-size="12">maiku.&lt;name&gt;</tspan></text>
+        <text x="50" y="160" font-size="10.5" fill="#d7dce6" fill-opacity="0.7">maiku's kernel, no policy, raises on unsupported shape, ~66 names</text>
+
+        <!-- L1 -->
+        <rect x="30" y="220" width="560" height="58" rx="8" fill="#5b9bd5" fill-opacity="0.14" stroke="#5b9bd5" stroke-width="1.6"></rect>
+        <text x="50" y="244" font-size="13" fill="#d7dce6">L1: <tspan font-family="ui-monospace,monospace" font-size="12">torch.ops.maiku.*</tspan></text>
+        <text x="50" y="262" font-size="10.5" fill="#d7dce6" fill-opacity="0.7">opaque to Dynamo, fake impl + autograd rule, one graph node</text>
+
+        <!-- L0 -->
+        <rect x="30" y="322" width="560" height="58" rx="8" fill="#ed9a3c" fill-opacity="0.14" stroke="#ed9a3c" stroke-width="1.6"></rect>
+        <text x="50" y="346" font-size="13" fill="#d7dce6">L0: <tspan font-family="ui-monospace,monospace" font-size="12">ct.launch</tspan> + _fwd_launch / _bwd_launch</text>
+        <text x="50" y="364" font-size="10.5" fill="#d7dce6" fill-opacity="0.7">the physics: untraceable, tile arithmetic lives here</text>
+
+        <!-- center arrows -->
+        <line x1="310" y1="176" x2="310" y2="220" stroke="#d7dce6" marker-end="url(#a3)"></line>
+        <text x="322" y="202" font-size="10.5" fill="#d7dce6" fill-opacity="0.8">is</text>
+        <line x1="310" y1="278" x2="310" y2="322" stroke="#d7dce6" marker-end="url(#a3)"></line>
+        <text x="322" y="304" font-size="10.5" fill="#d7dce6" fill-opacity="0.8">launches</text>
+
+        <!-- L2b -> L1 side lane -->
+        <polyline points="610,45 660,45 660,249 612,249" fill="none" stroke="#d7dce6" marker-end="url(#a3)"></polyline>
+        <text x="665" y="150" font-size="10.5" fill="#d7dce6" transform="rotate(90 665 150)" text-anchor="middle">calls L1, never L0</text>
+
+        <!-- forbidden L2b -> L0 -->
+        <line x1="16" y1="60" x2="16" y2="322" stroke="#d95555" stroke-dasharray="4 4" marker-end="url(#a3r)"></line>
+        <text x="16" y="352" font-size="10" fill="#d95555" text-anchor="middle" transform="rotate(-90 16 352)">never</text>
+      </svg>

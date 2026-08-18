@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 970 250" role="img"
+           aria-label="Pipeline diagram: cuTile Python compiles to open Tile IR bytecode, which the closed-source tileiras compiler lowers through cuda_tile dialect, nv_tileaa, nv_tileas, and NVVM/LLVM IR to a PTX text stage of unconfirmed role, ending in SASS that the GPU executes.">
+  <rect x="0" y="0" width="970" height="250" fill="#12151c"/>
+
+        <defs>
+          <marker id="a1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#d7dce6"></path>
+          </marker>
+        </defs>
+
+        <!-- opaque underlay -->
+        <rect x="236" y="52" width="602" height="158" rx="10" fill="none" stroke="#d7dce6" stroke-opacity="0.35" stroke-dasharray="5 5"></rect>
+        <text x="537" y="42" text-anchor="middle" font-family="ui-monospace,monospace" font-size="12" fill="#d7dce6" fill-opacity="0.75">tileiras, closed-source compiler (reverse-engineered structure shown)</text>
+
+        <!-- node 1: cuTile Python -->
+        <rect x="10" y="110" width="100" height="64" rx="8" fill="none" stroke="#d7dce6"></rect>
+        <text x="60" y="136" text-anchor="middle" font-size="12" fill="#d7dce6">cuTile</text>
+        <text x="60" y="151" text-anchor="middle" font-size="12" fill="#d7dce6">Python</text>
+        <text x="60" y="166" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#d7dce6" fill-opacity="0.65">@ct.kernel</text>
+
+        <!-- node 2: Tile IR bytecode (open) -->
+        <rect x="128" y="110" width="100" height="64" rx="8" fill="#5b9bd5" fill-opacity="0.14" stroke="#5b9bd5" stroke-width="1.6"></rect>
+        <text x="178" y="132" text-anchor="middle" font-size="11.5" fill="#d7dce6">Tile IR</text>
+        <text x="178" y="147" text-anchor="middle" font-size="11.5" fill="#d7dce6">bytecode</text>
+        <text x="178" y="163" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9" fill="#5b9bd5">open · cuda-tile</text>
+
+        <!-- node 3: cuda_tile dialect -->
+        <rect x="246" y="110" width="100" height="64" rx="8" fill="none" stroke="#d7dce6" stroke-opacity="0.7"></rect>
+        <text x="296" y="138" text-anchor="middle" font-size="11" fill="#d7dce6">cuda_tile</text>
+        <text x="296" y="153" text-anchor="middle" font-size="11" fill="#d7dce6">dialect</text>
+
+        <!-- node 4: nv_tileaa -->
+        <rect x="364" y="110" width="100" height="64" rx="8" fill="none" stroke="#d7dce6" stroke-opacity="0.7"></rect>
+        <text x="414" y="138" text-anchor="middle" font-size="11" fill="#d7dce6">nv_tileaa</text>
+        <text x="414" y="153" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#d7dce6" fill-opacity="0.6">arch-independent</text>
+
+        <!-- node 5: nv_tileas -->
+        <rect x="482" y="110" width="100" height="64" rx="8" fill="none" stroke="#d7dce6" stroke-opacity="0.7"></rect>
+        <text x="532" y="138" text-anchor="middle" font-size="11" fill="#d7dce6">nv_tileas</text>
+        <text x="532" y="153" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#d7dce6" fill-opacity="0.6">scheduled, sm_120</text>
+
+        <!-- node 6: NVVM/LLVM IR -->
+        <rect x="600" y="110" width="100" height="64" rx="8" fill="none" stroke="#d7dce6" stroke-opacity="0.7"></rect>
+        <text x="650" y="138" text-anchor="middle" font-size="11" fill="#d7dce6">NVVM /</text>
+        <text x="650" y="153" text-anchor="middle" font-size="11" fill="#d7dce6">LLVM IR</text>
+
+        <!-- node 7: PTX text (uncertain) -->
+        <rect x="718" y="110" width="106" height="64" rx="8" fill="none" stroke="#d7dce6" stroke-dasharray="4 4"></rect>
+        <text x="771" y="134" text-anchor="middle" font-size="11" fill="#d7dce6">PTX text</text>
+        <text x="771" y="149" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#d7dce6" fill-opacity="0.65">real ptxas hop,</text>
+        <text x="771" y="160" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#d7dce6" fill-opacity="0.65">or debug dump? unconfirmed</text>
+
+        <!-- node 8: SASS/cubin -->
+        <rect x="850" y="110" width="110" height="64" rx="8" fill="#ed9a3c" fill-opacity="0.16" stroke="#ed9a3c" stroke-width="1.6"></rect>
+        <text x="905" y="132" text-anchor="middle" font-size="11.5" fill="#d7dce6">SASS /</text>
+        <text x="905" y="147" text-anchor="middle" font-size="11.5" fill="#d7dce6">cubin</text>
+        <text x="905" y="163" text-anchor="middle" font-family="ui-monospace,monospace" font-size="8.5" fill="#ed9a3c">GPU executes this</text>
+
+        <!-- arrows -->
+        <line x1="110" y1="142" x2="126" y2="142" stroke="#d7dce6" marker-end="url(#a1)"></line>
+        <line x1="228" y1="142" x2="244" y2="142" stroke="#d7dce6" marker-end="url(#a1)"></line>
+        <line x1="346" y1="142" x2="362" y2="142" stroke="#d7dce6" marker-end="url(#a1)"></line>
+        <line x1="464" y1="142" x2="480" y2="142" stroke="#d7dce6" marker-end="url(#a1)"></line>
+        <line x1="582" y1="142" x2="598" y2="142" stroke="#d7dce6" marker-end="url(#a1)"></line>
+        <line x1="700" y1="142" x2="716" y2="142" stroke="#d7dce6" marker-end="url(#a1)"></line>
+        <line x1="824" y1="142" x2="848" y2="142" stroke="#d7dce6" marker-end="url(#a1)"></line>
+
+        <!-- bottom callouts -->
+        <text x="60" y="205" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#d7dce6" fill-opacity="0.6">frontend</text>
+        <text x="178" y="205" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#5b9bd5">public spec</text>
+        <text x="537" y="222" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#d7dce6" fill-opacity="0.6">~30 documented lowering/scheduling passes, recovered by reverse engineering, not published</text>
+        <text x="905" y="205" text-anchor="middle" font-family="ui-monospace,monospace" font-size="9.5" fill="#ed9a3c">machine code</text>
+      </svg>
