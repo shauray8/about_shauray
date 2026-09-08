@@ -397,7 +397,7 @@
         <p class="tagline">computers can see, hear and learn. welcome to the future!</p>
         
         <div class="contact">
-            <a href="https://twitter.com/shauray7">twitter</a>
+            <a href="https://x.com/shauray7">X</a>
             <a href="https://github.com/shauray8">github</a>
             <a href="mailto:shauray9@gmail.com">shauray9@gmail.com</a>
         </div>
@@ -445,7 +445,7 @@
             <h2>// work</h2>
             
             <div class="entry">
-                <div class="date">01/2024 - present</div>
+                <div class="date">01/2024 - 08/2026</div>
                 <div class="role">ML guy @ ModelsLab</div>
                 <div class="rant">
                 </div>
@@ -455,25 +455,16 @@
                     <li>I've got a love-hate relationship with CUDA and Triton - love the performance, hate the debugging headaches - maybe not the torch profiler</li>
                     <li>I'm always on the lookout for ways to parallelize model inference, so if you've got experience with parallel processing, let's chat.</li>
                 </ul>
-                <p style="margin-top: 10px;">updates on <a href="https://twitter.com/shauray7">twitter</a></p>
+                <p style="margin-top: 10px;">updates on <a href="https://x.com/shauray7">X</a></p>
             </div>
 
             <div class="entry">
-                <div class="date">01/2023 - 04/2023</div>
-                <div class="role">Senior Staff @ Zummit InfoLabs</div>
+                <div class="date">10/2022 - 04/2023</div>
+                <div class="role">various internships</div>
                 <div class="rant">
-                    Helped design companies' ML pipelines for better and faster deployment and improved access times.
+                    A stretch of ML internships before ModelsLab. Designed and cleaned up ML pipelines so deployment was faster and access times got better. On the modelling side I worked on demand prediction, started with plain statistical methods and then migrated the whole thing to graph neural networks. Learned a lot about GNNs there, mainly how spatial-temporal graphs make some of this cheaper and easier than the traditional approaches.
                 </div>
             </div>
-
-            <div class="entry">
-                <div class="date">10/2022 - 01/2023</div>
-                <div class="role">Jr. Data Scientist @ Zummit InfoLabs</div>
-                <div class="rant">
-                    I led a team of 5 interns and made some significant advancements in Demand Predictions which used some statistical methods and was then migrated to work with graph neural networks. Learned a lot about graph neural networks and how spatial-temporal graphs can make things faster and easier than some other traditional methods.
-                </div>
-            </div>
-
 
           <div class="section">
               <h2>// Education</h2>
@@ -490,23 +481,32 @@
         <hr>
 
         <div class="section">
-            <h2>// blackwell optims for wan2.2</h2>
+            <h2>// b200 optims</h2>
+
             <div class="rant">
-                this is what i'm working in my free time right now, mostly gathering up free lunches for optims and some cutedsl kernels, currently adopting tri dao's fa4 for wan2.2 since i won't need any causal masking or kv cache optimizations i'm striping it down to barebones and comparing what %sol i can achive with the knowledge i have. also i post a lot of profiles related to these opims on x.
+                <b>wan2.2</b> - this is what i'm working in my free time right now, mostly gathering up free lunches for optims and some cutedsl kernels, currently adopting tri dao's fa4 for wan2.2 since i won't need any causal masking or kv cache optimizations i'm striping it down to barebones and comparing what %sol i can achive with the knowledge i have. also i post a lot of profiles related to these opims on x.
             </div>
-            <ul style="margin-top: 15px;">
+            <ul>
                 <li><a href="https://www.github.com/shauray8/blackwan">BlackWan Github</a></li>
+            </ul>
+
+            <div class="rant">
+                <b>qwen-image</b> - same idea but taken end to end on qwen-image-2512. fa4 with causal=false, batched cfg, quack rmsnorm, rowwise fp8 gemms under compile, a triton rope kernel to kill pytorch's complex-number dispatch, fused qkv and bias fusion, then dpm-solver++ on top, which lands at ~1.4s per 1024x1024 image at quality equivalent to euler-28. the pattern that keeps repeating here is that the bottleneck is almost never what you think it is before you profile.
+            </div>
+            <ul>
+                <li><a href="https://github.com/shauray8/qwen-image-optimizations/">qwen-image-optimizations Github</a></li>
+                <li><a href="./blogs/qwen_image_optimizations.html">Optimizing Qwen-Image-2512 on a B200</a> - writeup of the whole thing</li>
             </ul>
         </div>
 
         <div class="section">
             <h2>// open source</h2>
             <div class="rant">
-                I have a deep deep love for OpenSource. It's like lifeblood of the tech world, and I'm all in! I was a regular contributor over at Hugging Face, rolling up my sleeves and getting things done. From Transformers to tokenizers, I'm in the trenches, making things better. Sharing some of the wisdom with blogs and some low quality tweets! So, remember, open source is where it's at.
+                I have a deep deep love for OpenSource. It's like lifeblood of the tech world, and I'm all in! I was a regular contributor over at Hugging Face, rolling up my sleeves and getting things done. From Transformers to tokenizers, I'm in the trenches, making things better. Sharing some of the wisdom with blogs and some low quality posts on X! So, remember, open source is where it's at.
             </div>
             <ul style="margin-top: 15px;">
                 <li><a href="https://huggingface.co/shauray">My HuggingFace Profile</a></li>
-                <li><a href="https://twitter.com/Shauray7">Tweets/Anouncements</a></li>
+                <li><a href="https://x.com/Shauray7">Posts/Anouncements</a></li>
             </ul>
         </div>
 
@@ -515,6 +515,14 @@
 
         <div class="section">
             <h2>// project graveyard</h2>
+
+            <div class="project">
+                <span class="project-name"><a href="https://github.com/shauray8/CascadeCache/">Cascade Cache</a></span> - block caching for diffusion transformers built on one claim I could actually check bit-for-bit, if a block reuses its output from the last step, every block after it is forced to reuse its old output too. Which means reaching back to block 40 and reaching back to block 2 give you the exact same image, and a "step" only ever really does one of two things, skip or don't. <a href="./blogs/cascade_cache.html">writeup</a>.
+            </div>
+
+            <div class="project">
+                <span class="project-name"><a href="https://github.com/shauray8/l2p_qwen_image">L2P for Qwen-Image</a></span> - transferring L2P (Unlocking Latent Potential for Pixel Generation) to Qwen-Image-2512 so it generates straight in pixel space instead of through the VAE. Freeze the whole DiT, train only the input projection, the first and last few blocks, and an added Detailer Head, keeping the base model's flow-matching objective. Looked good at 26k steps against the paper's 100k, then plateaued on one specific artifact and I ran out of credits before the last mile. <a href="./blogs/l2p_qwen_image.html">writeup</a>.
+            </div>
 
             <div class="project">
                 <span class="project-name"><a href="#">SREF Injections to Flux (To be released)</a></span> - Injecting SREF codes to Flux via the modulations layers.
@@ -545,10 +553,6 @@
             </div>
 
             <div class="project">
-                <span class="project-name"><a href="https://github.com/shauray8/onlygans">OnlyGans</a></span> - is currently under development and is NSFW. OnlyGans uses a fleet of SOTA generative models to generate naked individuals which would work something like thispersondoesnotexist.com. uses some version of StyleGan to generate images and may support videos in the future. <span class="emphasis">Support this noble cause by contributing to the repo and make this world a better place to live!</span>
-            </div>
-
-            <div class="project">
                 <span class="project-name"><a href="https://github.com/shauray8/trachea">Trachea</a></span> - transforms your speech to a text output. It uses a simple convolution model on mel spectrograms generated by a custom library which when presented with an audio sample would create a mel spectrogram and then the pixel data would get squished and smashed by the neural network to generate a text representation of that particular sample! It was a simple project for my deep learning class that I took in college.
             </div>
 
@@ -574,12 +578,12 @@
         <div class="section">
             <h2>// misc unsorted brain dump</h2>
             <ul>
-                <li>Who wants to work on "Error correction for cells to not get cancerous" message me on Twitter!!</li>
+                <li>Who wants to work on "Error correction for cells to not get cancerous" message me on X!!</li>
                 <li>I can't really find some good articles on The sigmoid curve of innovation maybe I'll write a blog on it!!</li>
-                <li>Some of my <a href="https://twitter.com/Shauray7">tweets</a> on deep learning</li>
+                <li>Some of my <a href="https://x.com/Shauray7">posts</a> on deep learning</li>
                 <li>A while back I got interested in Phage Mutation (I don't know the reason). Here's something that'll get you <a href="https://theminione.com/blog/2018/05/18/lambda-phage-classic-model-keeps-evolving/">started</a></li>
                 <li><a href="https://medium.com/@SereneBiologist/finding-beauty-in-bad-algorithms-799af003aee8">Finding Beauty in Bad Algorithms</a></li>
-                <li>We can arrange some kind of discussion on the hard problem of consciousness!! I think that's a fairly misunderstood topic. message me on Twitter and maybe we can do something</li>
+                <li>We can arrange some kind of discussion on the hard problem of consciousness!! I think that's a fairly misunderstood topic. message me on X and maybe we can do something</li>
                 <li>I've learned a lot from George Hotz and his coding streams!! <a href="https://geohotz.com">go have a look!</a></li>
                 <li><a href="http://lossfunctions.tumblr.com/">Loss function Tumblr</a> Andrej Karpathy's collection of funny loss functions.</li>
                 <li>I first got interested in the hardware and was not a software person at first. My first Hardware interaction was when I was 8 or 9 maybe that is when I started assembling computers. and that kinda stayed with me and I still have that love for hardware.</li>
@@ -601,7 +605,7 @@
         </div>
         
         <div class="section">
-            <p style="margin-bottom: 20px;">Refer <span class="emphasis">Twitter</span> for microblogs, this is for full length technical deep dives. Writing on STEM related topics and experimenting with the Feynman technique.</p>
+            <p style="margin-bottom: 20px;">Refer <span class="emphasis">X</span> for microblogs, this is for full length technical deep dives. Writing on STEM related topics and experimenting with the Feynman technique.</p>
         </div>
 
         <div class="blog-grid">
