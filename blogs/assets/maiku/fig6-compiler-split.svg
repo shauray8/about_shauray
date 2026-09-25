@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 340" role="img"
+     aria-label="Diagram of the compiler pipeline split. Tile IR bytecode flows into a small open source box containing exactly five passes: canonicalize, CSE, loop invariant code motion, FMA fusion, and loop split. That box hands off to a much larger closed source tileiras box containing TMA insertion, warp specialization, register allocation, instruction scheduling, and instruction selection, which produces SASS.">
+  <rect x="0" y="0" width="820" height="340" fill="#12151c"/>
+  <defs>
+    <marker id="f6a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d7dce6"></path>
+    </marker>
+  </defs>
+
+  <text x="24" y="30" font-size="13" fill="#d7dce6" fill-opacity="0.75">bytecode in, SASS out: how much of the pipeline is actually readable</text>
+
+  <!-- bytecode input -->
+  <rect x="24" y="130" width="90" height="70" rx="8" fill="#7d859a" fill-opacity="0.14" stroke="#7d859a" stroke-width="1.6"/>
+  <text x="69" y="160" font-size="12" fill="#d7dce6" text-anchor="middle">Tile IR</text>
+  <text x="69" y="176" font-size="12" fill="#d7dce6" text-anchor="middle">bytecode</text>
+
+  <line x1="114" y1="165" x2="150" y2="165" stroke="#d7dce6" marker-end="url(#f6a)"/>
+
+  <!-- open box: small -->
+  <rect x="150" y="110" width="230" height="110" rx="8" fill="#45b5a5" fill-opacity="0.14" stroke="#45b5a5" stroke-width="1.6"/>
+  <text x="265" y="130" font-size="12.5" fill="#45b5a5" text-anchor="middle" font-weight="bold">open dialect (github.com/NVIDIA/cuda-tile)</text>
+  <text x="265" y="150" font-size="11" fill="#d7dce6" text-anchor="middle">canonicalize · CSE</text>
+  <text x="265" y="166" font-size="11" fill="#d7dce6" text-anchor="middle">loop-invariant code motion</text>
+  <text x="265" y="182" font-size="11" fill="#d7dce6" text-anchor="middle">fuse-fma · loop-split</text>
+  <text x="265" y="202" font-size="10" fill="#d7dce6" fill-opacity="0.6" text-anchor="middle">exactly 5 passes total, gated by opt_level</text>
+
+  <line x1="380" y1="165" x2="416" y2="165" stroke="#d7dce6" marker-end="url(#f6a)"/>
+
+  <!-- closed box: big -->
+  <rect x="416" y="40" width="330" height="250" rx="8" fill="#e0716f" fill-opacity="0.12" stroke="#e0716f" stroke-width="1.6"/>
+  <text x="581" y="64" font-size="12.5" fill="#e0716f" text-anchor="middle" font-weight="bold">tileiras (closed source)</text>
+  <text x="581" y="96" font-size="11.5" fill="#d7dce6" text-anchor="middle">TMA descriptor construction + mbarrier insertion</text>
+  <text x="581" y="122" font-size="11.5" fill="#d7dce6" text-anchor="middle">warp specialization, register repartitioning</text>
+  <text x="581" y="148" font-size="11.5" fill="#d7dce6" text-anchor="middle">register allocation</text>
+  <text x="581" y="174" font-size="11.5" fill="#d7dce6" text-anchor="middle">instruction scheduling</text>
+  <text x="581" y="200" font-size="11.5" fill="#d7dce6" text-anchor="middle">instruction selection, SASS emission</text>
+  <text x="581" y="234" font-size="10.5" fill="#d7dce6" fill-opacity="0.75" text-anchor="middle">UTMALDG.2D, SYNCS.ARRIVE, USETMAXREG:</text>
+  <text x="581" y="252" font-size="10.5" fill="#d7dce6" fill-opacity="0.75" text-anchor="middle">no op in the open dialect names any of this</text>
+  <text x="581" y="274" font-size="10" fill="#d7dce6" fill-opacity="0.55" text-anchor="middle">only a hint the open passes can offer, not request</text>
+
+  <line x1="746" y1="165" x2="782" y2="165" stroke="#d7dce6" marker-end="url(#f6a)"/>
+
+  <!-- SASS output -->
+  <rect x="782" y="130" width="26" height="70" rx="6" fill="#ed9a3c" fill-opacity="0.16" stroke="#ed9a3c" stroke-width="1.6" opacity="0"/>
+  <text x="795" y="165" font-size="12" fill="#d7dce6" text-anchor="middle" transform="rotate(90 795 165)">SASS</text>
+</svg>

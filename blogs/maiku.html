@@ -41,8 +41,8 @@ function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-the
       <div class="post">
 
   <header class="post-header">
-    <h1>cuTile down to SASS: building maiku on RTX PRO 6000 Blackwell</h1>
-    <p class="meta">August 18, 2026</p>
+    <h1>A bunch of CuTile kernels </h1>
+    <p class="meta">August 27, 2026</p>
   </header>
 
   <article class="post-content">
@@ -113,6 +113,15 @@ function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-the
         max-width: 50%;
         height: auto;
     }
+    .caption-row {
+        display: flex;
+        gap: 10px;
+    }
+    .caption-row p.caption {
+        flex: 1 1 0;
+        min-width: 0;
+        margin: 0.4em 0;
+    }
     .post-content table { width: 100%; }
     .post-header .authors {
         font-size: 15px;
@@ -124,6 +133,27 @@ function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-the
     }
     .post-header .authors a:last-child { margin-right: 0; }
     ul.eliminated li { margin-bottom: 2px; }
+
+    .toc {
+        border: 1px solid var(--code-border);
+        border-radius: 4px;
+        padding: 14px 20px;
+        margin: 1.5em 0;
+    }
+    .toc-title {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--muted);
+        margin: 0 0 8px 0;
+    }
+    .toc ol {
+        margin: 0;
+        padding-left: 1.2em;
+    }
+    .toc li { margin-bottom: 4px; }
+    .toc a { text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
 
     /* Click-to-zoom lightbox */
     .post-content img { cursor: zoom-in; }
@@ -162,24 +192,38 @@ function toggleTheme(){var h=document.documentElement,n=h.getAttribute('data-the
 </style>
 
 <div class="gif-container">
-    <img src="./assets/maiku/fig1-lowering-pipeline.svg" alt="pipeline diagram: cuTile Python compiles to open Tile IR bytecode, which the closed source tileiras compiler lowers through several undocumented internal passes to SASS" decoding="async">
+    <img src="./assets/maiku/hero_chart.png" alt="pipeline diagram: cuTile Python compiles to open Tile IR bytecode, which the closed source tileiras compiler lowers through several undocumented internal passes to SASS" decoding="async">
     <p class="caption">the whole pipeline in one picture: open bytecode in, undocumented SASS out, one closed compiler in the middle</p>
 </div>
 
-<h3>Introduction</h3>
+<nav class="toc">
+    <p class="toc-title">Contents</p>
+    <ol>
+        <li><a href="#introduction">Introduction</a></li>
+        <li><a href="#how-cutile-lowers">How cuTile lowers</a></li>
+        <li><a href="#tile-ir-memory-model">The Tile IR memory model</a></li>
+        <li><a href="#the-hardware">The hardware</a></li>
+        <li><a href="#what-maiku-is">What is maiku</a></li>
+        <li><a href="#swiglu">Dissecting a kernel - SwiGLU</a></li>
+        <li><a href="#linear-mxfp8">Dissecting another kernel - Linear_mxfp8</a></li>
+        <li><a href="#mxfp8qk-attention">mxfp8qk attention</a></li>
+        <li><a href="#what-cutile-cannot-do">What cuTile cannot do (yet)</a></li>
+        <li><a href="#whats-next">What's next</a></li>
+        <li><a href="#references">References</a></li>
+    </ol>
+</nav>
+
+<h3 id="introduction">Introduction</h3>
 <p>
-Every kernel in maiku is written in cuTile. NVIDIA's own docs (docs.nvidia.com/cuda/cutile-python) cover the DSL well enough that redoing the tile-vs-thread pitch here would just be a worse copy of something you can already read. What isn't written down anywhere is what happens after you write the kernel: what actually compiles it, and what that compiler hides from you.
-</p>
-<p>
-One thing from the DSL is worth keeping in mind before the compiler stuff, because it explains why tile shape and grid size keep coming up. A <code>@ct.kernel</code> takes four scheduling knobs, <code>occupancy</code>, <code>num_ctas</code>, <code>num_worker_warps</code>, <code>opt_level</code>, plus a tile shape and a grid at launch. That's everything you control besides the actual math. Four of the five big speedups in this post came from exactly two of those knobs: tile shape and grid size. The math never changed. Fewer knobs means fewer places to look when a kernel is slow, and the one you find usually matters a lot.
+Past few months I've been working on writing more and more cuTile kernels, to be fair it's not as mature or better than the other widely used DSLs but I kinda like the premise of its IR, and I think I saw Triton got support for the same lowering recently, so here is a little, I don't know, maybe first impressions if you will, for cuTile, and I kinda sorted all of my kernels and gave it a goofy name. It goes without saying that every kernel in here is written in cuTile. <a href="https://docs.nvidia.com/cuda/cutile-python/">NVIDIA's own docs</a> cover the DSL well enough that redoing the tile vs thread pitch here would just be useless, so go read that for better know-how on the DSL and the whole argument. Here I will start with how it lowers, and what the compiler does and does not tell you, and a couple more arguments around that.
 </p>
 
-<h3>How cuTile actually lowers</h3>
+<h3 id="how-cutile-lowers">How cuTile lowers</h3>
 <p>
-cuTile Python doesn't compile straight to SASS. It compiles to Tile IR bytecode first, an open MLIR format (the <code>cuda_tile</code> dialect, github.com/NVIDIA/cuda-tile, Apache 2.0), and every frontend that wants Tile IR goes through the same door. NVIDIA's EuroLLVM 2026 talk on the dialect (Matthias Springer and Lorenzo Chelini, "CUDA Tile IR: Lessons from a Tile Centric CUDA Dialect for MLIR") draws it as cuTile Python, C++ through <code>nvcc</code>, an experimental Rust frontend, a Triton backend, and a teaching frontend called <code>cuTile BASIC</code>, all producing the same <code>cuda_tile</code> bytecode. One closed-source compiler takes it from there: <code>tileiras</code>, called "conceptually similar to <code>ptxas</code>" in the same talk.
+cuTile compiles to Tile IR bytecode, an open MLIR format (the <code>cuda_tile</code> dialect), and every frontend that wants Tile IR goes through the same lowering. unfortunatly closed source compiler takes it from there: <code>tileiras</code>, called "conceptually similar to <code>ptxas</code>" in one of there talks so figure that out on your own I guess.
 </p>
 <p>
-What that compiler does at the last step isn't a matter of opinion. The build is three commands:
+Essentially going through these 3 stages:
 </p>
 <pre><code class="language-bash">
 $ cuda-tile-translate matmul_test.mlir -mlir-to-cudatilebc -o matmul_test.bc
@@ -187,21 +231,23 @@ $ tileiras --gpu-name=sm_100 matmul_test.bc -o matmul_test.o
 $ cuobjdump -sass matmul_test.o
 </code></pre>
 <p>
-and what <code>cuobjdump</code> pulls out of that object is real, undocumented Blackwell SASS: <code>UTMALDG.2D</code>, <code>UTCHMMA</code>, <code>UTMASTG.2D</code>. Same slide: "PTX is documented, but <code>tileiras</code> will generate SASS only." Tile IR isn't PTX with tile syntax bolted on. It goes straight to SASS, and none of those instructions have public documentation anywhere.
+and what <code>cuobjdump</code> pulls out of that object can be undocumented SASS: <code>UTMALDG.2D</code>, <code>UTCHMMA</code>, <code>UTMASTG.2D</code>. Things go straight to SASS from here, and none of those instructions have public documentation. See their <a href="https://llvm.org/devmtg/2026-04/slides/mlir/mlir_springer.pdf">LLVM talk</a> for more information.
 </p>
 <p>
-Skipping PTX buys something specific. PTX is a SIMT virtual ISA, so a tile-aware compiler that lowered through it would have to flatten every tile down to per-thread instructions and hope <code>ptxas</code> reconstructs the tile structure for tensor cores and TMA on the other side. Tile IR keeps the tile shape all the way to the final scheduling decision instead, which is how <code>tileiras</code> gets to emit instructions like <code>UTMALDG.2D</code> that never had to become part of PTX's public ISA in the first place.
+Skipping PTX might be in hindsight a good idea cause PTX is a SIMT V-ISA, so a tile aware compiler that loweres through it would have to flatten every tile down to per-thread instructions and hope <code>ptxas</code> reconstructs the tile structure for tensor cores and TMA on the other side. Tile IR keeps the tile shape all the way to the final scheduling decision instead, which is how <code>tileiras</code> gets to emit instructions like <code>UTMALDG.2D</code> that never had to become part of PTX's public ISA in the first place.
 </p>
 <p>
-The stability promise here is smaller than it sounds, and it's easiest to just quote it: there's no stability guarantee on the text format, only on the bytecode. An <code>.mlir</code> file that compiles today isn't a promise. The bytecode is.
-</p>
-<p>
-There are two ways to load a tile, and it matters which one you use. A view-based load goes through a <code>tensor_view</code>, which carries its own shape and strides, so the compiler has everything it needs to build a TMA descriptor. A pointer-based load, closer to how Triton does it, builds the tile's addresses by hand, and recovering enough structure from that arithmetic to still use TMA is much harder for the compiler to prove. NVIDIA's own guidance is blunt about which one to prefer: view-based loads with declared alignment are the recommended path for anything performance-critical.
+The open dialect itself does almost nothing. Its entire optimizer, read from <a href="https://github.com/NVIDIA/cuda-tile/blob/af2417041cc939b87ef56d92cfdcf61737c5457e/include/cuda_tile/Dialect/CudaTile/Transforms/Passes.td"><code>Passes.td</code></a> in the dialect source, is five passes: canonicalize, common subexpression elimination, loop-invariant code motion, one FMA-fusion pass, one loop-split pass. Gated by <code>opt_level</code>.  FMA fusion sits outside that ladder, a separate flag the pipeline builder checks on its own, off by default. Everything else that shows up in this post's SASS, TMA descriptor construction, mbarrier insertion, warp specialization, register alloc, instruction scheduling, happens after this, inside <code>tileiras</code>.
 </p>
 
-<h3>The Tile IR memory model</h3>
+
 <p>
-Every tile load or store is really one memory operation per element, and by default none of them are ordered against each other. The default scope is <code>weak</code>. The dialect's own example for what that means is worth using directly, it's three lines:
+There are two ways to load a tile, and it matters which one you use. A view-based load goes through a <a href="https://github.com/NVIDIA/cutile-python/blob/9c3ee3ccc504f18bbabf55b0d3e6d398bb21ecc4/src/cuda/tile/_bytecode/type.py#L103"><code>tensor_view</code></a>, which carries its own shape and strides, so the compiler has everything it needs to build a TMA descriptor. A pointer-based load, closer to how Triton does it, builds the tile's addresses by hand, and recovering enough structure from that arithmetic to still use TMA is much harder for the compiler to prove. NVIDIA's guidance is blunt about which one to prefer: view-based loads with declared alignment are the recommended path for anything performance-critical I guess. 
+</p>
+
+<h3 id="tile-ir-memory-model">The Tile IR memory model</h3>
+<p>
+Every tile load or store is one memory op per element, and by default none of them are ordered against each other. Ops with no scope specified default to <a href="https://docs.nvidia.com/cuda/tile-ir/latest/sections/memory_model.html#scopes"><code>weak</code></a>. The dialect's own example for what that means is worth pasting here:
 </p>
 <pre><code class="language-plaintext">
 %cst       = constant &lt;f32: [0.0, 1.0, 2.0, ...]&gt; : tile&lt;64xf32&gt;
@@ -209,67 +255,81 @@ Every tile load or store is really one memory operation per element, and by defa
 %data, %r1 = load_ptr_tko weak %ptr -> tile&lt;64xf32&gt;, token
 </code></pre>
 <p>
-What is <code>%data</code>? The snippet doesn't say. The store's token and the load's input aren't connected, so the two only share an order on the page, not at runtime, and order on the page isn't a guarantee in Tile IR. A <code>token</code> exists only at compile time, with no runtime form: it's just the compiler's way of knowing "keep these two in order." Without one, the load and store can run in whatever order the backend wants. NVIDIA shows three legal lowerings of that exact snippet: one runs the sixty-four stores and loads in reverse order against each other, one runs them matching, one merges the whole thing into two <code>cp.async.bulk.tensor</code> calls issued by a single thread, TMA's async bulk copy. All three are correct. That's the point: correctness comes from the token, never from reading the code top to bottom.
+What is <code>%data</code>? The store's token and the load's input aren't connected, so the two only share an order on the page, not at runtime, and order on the page isn't a guarantee. A <code>token</code> exists only at compile time, with no runtime form, it's just the compiler's way of knowing "keep these two in order." Without one, the load and store can run in whatever order the backend wants. Their docs (LINK?) show three legal lowerings of that exact snippet: one runs the sixty-four stores and loads in reverse order against each other, one runs them matching, one merges the whole thing into two <code>cp.async.bulk.tensor</code> calls issued by a single thread.
 </p>
-
-<h3>The hardware</h3>
 <p>
-Every number in this post came off one card: an NVIDIA RTX PRO 6000 Blackwell Server Edition, GB202, sm_120 (B200s got expensive enough that tuning against one isn't worth it right now). One fact about it has to land before any benchmark table, or every bandwidth number later will read wrong.
+Nobody writes a kernel this way. Real code never mentions a token, and the compiler threads one through every memory op automatically, in program order. What actually matters is when the compiler decides it's safe to break that order.
+</p>
+<p>
+That's the real mechanism behind "the compiler can parallelize your loop," and it's a checkable, per-array decision. A loop that stores into a different, disjoint address each iteration compiles so every iteration's store reads the token from before the loop started, not from the iteration before it, no dependency from store <em>i</em> to store <em>i+1</em> at all. Two arrays written independently in the same loop get two entirely separate chains, disjointness is tracked per array, not globally. The moment the compiler can't prove disjointness, aliased or overlapping-stride views, the same loop compiles with a full serializing chain instead. The difference is exactly whatever alias and stride facts the compiler can prove about that tensor.
 </p>
 
 <div class="gif-container">
-    <img src="./assets/maiku/fig2-memory-hierarchy.svg" alt="funnel diagram of the SM120 memory hierarchy: registers at 256 kilobytes per SM narrowest at top, shared memory and L1 at roughly 228 kilobytes per SM, L2 cache at 128 megabytes shared across the device, and device memory at 95 gigabytes and about 1792 gigabytes per second widest at bottom" decoding="async">
-    <p class="caption">the SM120 memory hierarchy, top to bottom: read every benchmark table in this post against this picture</p>
+    <img src="./assets/maiku/fig7-token-dag.png" alt="two real token-consumption graphs for a three iteration store loop, using the store_ptr_tko op. Left, provably disjoint stores: all three stores consume the same pre-loop token directly, none of them consume each other's token, so nothing orders them. Right, provably aliased stores through a broadcast view with stride zero: each store consumes the previous store's token, forming a strict chain from t0 to t1 to t2." decoding="async">
+    <p class="caption">same loop shape, opposite token graph: disjointness is proven per array, and the graph is the actual proof</p>
 </div>
 
 <p>
-The L2 is 128 MB, shared across all 188 SMs. A 4096x4096 bf16 tensor is 33 MB. At the shapes a diffusion transformer runs, inputs and outputs usually sit in L2 for the whole kernel, sometimes the whole forward pass. So when a table later says ">100% of HBM peak," that's not a mistake. It's an L2 number, and reading it as DRAM will get you the wrong conclusion.
+<code>ct.load</code>/<code>ct.store</code>/<code>ct.atomic_rmw</code> takes in a real <code>memory_order</code> argument, <code>weak</code>, <code>relaxed</code>, <code>acquire</code>, <code>release</code>, <code>acq_rel</code>. The clearest place it earns its keep is a lock. A device-wide spinlock, a thousand-plus CTAs contending on one, is built from <a href="https://github.com/NVIDIA/cutile-python/blob/9c3ee3ccc504f18bbabf55b0d3e6d398bb21ecc4/src/cuda/tile/_stub.py#L1749"><code>atomic_cas</code></a> with <code>acquire</code> to take the lock, and <a href="https://github.com/NVIDIA/cutile-python/blob/9c3ee3ccc504f18bbabf55b0d3e6d398bb21ecc4/src/cuda/tile/_stub.py#L1870"><code>atomic_xchg</code></a> with <code>release</code> to drop it. <code>acquire</code> on the take means every read a CTA does once it's inside the lock is guaranteed to happen after it actually won the lock, nothing can get hoisted ahead and read stale data. <code>release</code> on the drop means every write that CTA made while holding the lock is guaranteed visible to whichever CTA takes it next, nothing gets left behind, still in flight, when the lock changes hands.
+</p>
+
+<h3 id="the-hardware">The hardware</h3>
+<p>
+Most of the work on this was done on a single RTX PRO 6000 (sm_120), B200s got pretty darn expensive, tuning and writing kernels for it wasn't worth it for me. Given that these GPUs still come under the Blackwell family but NVIDIA wants to make a couple of bucks off its server hardware hence it does not have anything that makes Blackwell a Blackwell. I won't go deep into the hardware here since that's well covered on <a href="https://research.colfax-intl.com/">Colfax's blog</a> and <a href="https://www.nvidia.com/content/dam/en-zz/Solutions/design-visualization/quadro-product-literature/NVIDIA-RTX-Blackwell-PRO-GPU-Architecture-v1.0.pdf">the datasheet for the GPU</a>. I'll mostly look at the hardware from cuTile itself, but here's a little diagram of how data actually moves through an SM: in through TMA, staged through shared memory, and out to the tensor core through <code>mma.sync</code>, the Ampere instruction in that path.
+</p>
+
+<div class="gif-container">
+    <img src="./assets/maiku/shapes at 26-08-26 14.24.40.svg" alt="data flow through one SM, repeated across all of them. Global memory connects to a TMA engine via cp.async.bulk. The TMA engine loads into shared memory. From shared memory, ldmatrix loads into the register file, and stmatrix stores back out. The register file feeds the tensor core through mma.sync, and the tensor core writes its accumulator back to a register file through accum. A separate CUDA cores box sits alongside the tensor core as the other compute path" decoding="async">
+    <p class="caption">the real path data takes through an SM: TMA in, shared memory staging, register file, and mma.sync out to the tensor core</p>
+</div>
+
+<p>
+For more information on the hardware itself, look at <a href="https://research.colfax-intl.com/cutlass-tutorial-nvfp4-blockscaled-gemm-on-nvidia-rtx-pro-blackwell-gpus-sm12x/">the first section of the Colfax blog</a>. The L2 is 128 MB, shared across all 188 SMs. At the shapes a diffusion transformer might run, inputs and outputs usually sit in L2 for the whole kernel, sometimes the whole forward pass. So when a table later says ">100% of HBM peak," it's an L2 number, so keep that in mind.
 </p>
 <p>
-The register file matters less often, but hard when it does: 65,536 32-bit registers per SM, split across however many CTAs the occupancy setting keeps resident. Keep one tile too many live, or pick a tile too tall for the budget, and it spills to local memory, which is just DRAM wearing a different name. It still compiles. It's still correct. It's just slower, and nothing in the output tells you why. The arithmetic is worth doing once: at <code>occupancy=2</code> and 128 threads per CTA, the budget is 128 KB per CTA. An attention kernel holding <code>acc</code>, <code>q</code>, <code>k</code>, and <code>v</code> at <code>TILE_M=128, TILE_N=128, D=128</code> needs 160 KB, 32 KB over budget, guaranteed spill. Drop to <code>TILE_M=64</code> and the same four tiles need 112 KB, 16 KB of headroom, no spill. Nothing about the kernel's correctness changed between those two numbers.
+65,536 32-bit registers per SM (hasnt changed since volta I guess), split across however many CTAs the occupancy setting keeps resident. Keep one tile too many live, or pick a tile too tall for the budget, and it might spill to local memory. The arithmetic is worth doing once: at <code>occupancy=2</code> and 128 threads per CTA, the budget is 128 KB per CTA. An attention kernel holding <code>acc</code>, <code>q</code>, <code>k</code>, and <code>v</code> at <code>TILE_M=128, TILE_N=128, D=128</code> quick maths would tell you that it needs 160 KB, 32 KB over budget resulting in a spill. Drop to <code>TILE_M=64</code> and the same would need 112 KB which results in no spills i.e. good shit.
 </p>
 <p>
-TMA sits underneath <code>ct.load</code>/<code>ct.store</code> whenever the access pattern qualifies: dedicated hardware for indexed loads and stores against a fixed pattern, separate from a normal thread-issued load. A kernel talks to it through a <code>latency=</code> hint:
+<a href="https://developer.nvidia.com/blog/nvidia-hopper-architecture-in-depth/">TMA</a> sits underneath <code>ct.load</code>/<code>ct.store</code> whenever the access pattern qualifies: dedicated hardware for indexed loads and stores against a fixed pattern, separate from a normal thread-issued load. A kernel talks to it through <code>latency</code> hint and an <code>allow_tma</code> flag.
 </p>
 <pre><code class="language-python">
 x0 = ct.load(X, index=(b, h, bid_s, 0), shape=(1, 1, TILE_S, TILE_D2),
-             padding_mode=zero, latency=7)
+             padding_mode=zero, latency=7, allow_tma=True)
+
+# allow_tma=False is the one hard guarantee here: this load never lowers through TMA
+x1 = ct.load(X, index=(b, h, bid_s, 0), shape=(1, 1, TILE_S, TILE_D2),
+             padding_mode=zero, allow_tma=False)
 </code></pre>
 <p>
-The hint isn't a request for TMA. It tells the scheduler how far ahead to issue the copy, and the compiler decides from there whether the pattern is regular enough, static shape, known strides, to actually route through TMA, or fall back to per-thread loads.
+<code>latency</code> (<a href="https://docs.nvidia.com/cuda/cutile-python/performance.html#performance-tuning">docs</a>) is a hint. It tells the scheduler how far ahead to issue the copy, and the compiler still has to decide whether the pattern is regular enough, static shape, known strides, to route through TMA or fall back to per-thread loads. Although not sure on the recent releases even allow_tma=False would trigger the TMA instructions on my initial tests.
 </p>
 <p>
-CTA clusters work the same way. sm_120 groups cooperating CTAs into a cluster with its own SM-to-SM interconnect, and Tile IR's optimization guide says clustering buys "dual CTA MMA instructions, multicast TMA, distributed shared memory, and cluster wide barriers." None of that is something you call directly. It's all behind one integer, <code>num_ctas</code>, on or off, nothing finer. maiku has hit both sides of this. Mix a two-pass reduction with <code>num_ctas=2</code> and the GPU hangs outright on sm_120, no error, just the hang. A second, milder case of the same mistake: forming a cluster for an attention kernel with nothing to actually share across CTAs costs 20x, observed directly in an autotune sweep, not a hang this time, just 20x slower for no benefit. And the same wide cluster that speeds up a plain bf16 or fp8 GEMM slows down a block-scaled <code>mma_scaled</code> GEMM on the same card, the opposite of what you'd guess. That one gets explained properly once <code>linear_mxfp8</code> comes up.
-</p>
-<p>
-Peak throughput on this card is 500 TFLOP/s FP16 and 2000 TFLOP/s FP4, by Colfax's own measurement on the RTX PRO 6000. sm_120 is Blackwell, but not all of it. B200 (SM10x) issues its block-scaled matmul through the asynchronous <code>tcgen05.mma</code>, reading operands out of Tensor Memory. sm_120 has neither <code>tcgen05</code> nor TMEM: it issues the synchronous, warp-collective <code>mma.sync</code> instead, sourced straight from register memory. Colfax states the consequence plainly: "SM10x GEMM kernels are completely incompatible with SM12x and will not run on those devices." <code>mma_scaled</code>, the block-scaled path maiku's MXFP8 and NVFP4 kernels use, is what <code>mma.sync</code> looks like from cuTile, and it schedules differently because it has no TMEM to fall back on. The actual PTX instruction behind NVFP4 block-scaled matmul is <code>mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3</code>, one fixed 16x8x64 MMA atom, which is the shape <code>tileiras</code> is actually scheduling around whenever <code>mma_scaled</code> shows up in a kernel. Against the older sm_8x consumer cards, sm_120 gains sub-byte and block-scaled types, TMA, Cluster Launch Control, and PDL.
-</p>
-<p>
-The other card in this post is sm_90, Hopper. maiku keeps real tuned constants for both, and they disagree enough to put side by side:
-</p>
-<table>
-  <thead>
-    <tr><th></th><th>sm_90 (H100 SXM)</th><th>sm_120 (RTX PRO 6000)</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>SMs</td><td>132</td><td>188</td></tr>
-    <tr><td>L2</td><td>50 MB</td><td>128 MB</td></tr>
-    <tr><td>memory</td><td>80 GB HBM3</td><td>95 GB GDDR7</td></tr>
-    <tr><td>peak bandwidth</td><td>~3.35 TB/s</td><td>~1792 GB/s</td></tr>
-    <tr><td>register file / SM</td><td>256 KB</td><td>256 KB</td></tr>
-  </tbody>
-</table>
-<p>
-The register budget per SM hasn't changed since Volta. Everything else has: sm_120 has more than double the L2 and about half the bandwidth of sm_90. A kernel tuned to be memory-bound on one isn't tuned to be memory-bound on the other, which is why <code>maiku/_configs.py</code> keeps separate <code>ct.ByTarget(sm_90=..., sm_120=...)</code> entries instead of one number for "Hopper-class hardware."
+<a href="https://modal.com/gpu-glossary/device-software/cooperative-thread-array">CTA clusters</a> are the next scope up, one thread issues a TMA copy, a warp is 32 of those threads, a CTA's worker pool is some number of warps (the IR only supports 4 or 8, atleast for now) and a cluster is where multiple CTAs share an SM to SM interconnect and can address each other's shared memory directly on Blackwell. Clustering buys dual CTA MMA instructions, multicast TMA, distributed shared memory, and cluster wide barriers, on the hardware that has all four. sm_120 doesn't: the multicast variant of the TMA copy instruction is gated to <code>sm_90a</code>/<code>sm_100a</code>/<code>sm_110a</code>, and dual CTA MMA needs <code>tcgen05</code>, which sm_120 doesn't have either (see the attention section below). What a real clustered sm_120 SASS actually shows is pretty narrow: cluster barriers are there, <code>UCGABAR_ARV</code>/<code>UCGABAR_WAIT</code>, the multicast TMA instruction isn't, same <code>UTMALDG.2D</code> as num_ctas=1.
 </p>
 
-<h3>What maiku is</h3>
+<div class="gif-container">
+    <img src="./assets/maiku/clusters.svg" alt="two real cluster configurations on sm_120. Left, num_ctas=1, no cluster: two SMs each run their own CTA with its own private shared memory, no connection between them. Right, num_ctas=2, a cluster of two CTAs: the two SMs are joined by the real SM-to-SM interconnect, and each CTA's shared memory is directly addressable by the other, distributed shared memory. Two real incidents are called out on the clustered side: mixing num_ctas=2 with a two-pass reduction hangs the GPU outright with no error, and clustering an attention kernel with nothing to actually share across CTAs costs 20x in a real autotune sweep. sm_120's real ceiling is a cluster of up to 16 CTAs, a frontend choice via num_ctas, not a hardware limit, though maiku itself only ever asks for 1 or 2" decoding="async">
+    <p class="caption">the interconnect a cluster actually buys: private shared memory on the left, directly addressable across CTAs on the right, and both of maiku's real cluster mistakes on record</p>
+</div>
+
 <p>
-maiku is a cuTile kernel library for diffusion inference, built around Z-Image Turbo and, more recently, a Krea 2 Turbo port. Every kernel is a real PyTorch operator, not a wrapper around one:
+Peak throughput on a 6000 pro should be around 500 TFLOP/s FP16 and 2000 TFLOP/s FP4. sm_120 is Blackwell, but not all of it. B200 (SM100) gets <a href="https://mlc.ai/modern-gpu-programming-for-mlsys/chapter_tensor_cores/index.html"><code>tcgen05.mma</code></a>, async-dispatched through descriptors, with the accumulator living in Tensor Memory. sm_120 doesn't have addresses for it, no <code>tcgen05</code>, no TMEM. It issues the synchronous, warp-collective <code>mma.sync</code> instead, sourced straight from register memory. <code>mma_scaled</code>, the block-scaled path maiku's MXFP8 and NVFP4 kernels use, is what <code>mma.sync</code> looks like from cuTile, and it schedules differently because it has no TMEM to fall back on. The actual PTX instruction behind NVFP4 block-scaled matmul is <code>mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X.m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3</code>, one fixed 16x8x64 MMA atom, which is the shape <code>tileiras</code> is actually scheduling around whenever <code>mma_scaled</code> shows up in a kernel. Against the older sm_8x consumer cards, sm_120 gains sub-byte and block-scaled types, TMA, CLC and PDL.
+</p>
+
+<h4>Where the energy goes (unrelated but interesting)</h4>
+<p>
+Arithmetic is nearly free next to moving data. A 32-bit FMA is about 4.6pJ at 45nm, a full instruction fetch-through-register-write is about 70pJ for a plain add, mostly cache and control, not the math (<a href="https://www.gwern.net/doc/cs/hardware/2014-horowitz-2.pdf">Horowitz, ISSCC 2014</a>). NVIDIA's own numbers land on the same shape on a real GPU a 64-bit FMA is about 50pJ, "less than 3 percent of the computational operation's energy per instruction," reading its operands out of on-chip SRAM costs about as much as the FMA itself, 10mm across the die is 310pJ, DRAM is over 10nJ, 200x the FMA (<a href="https://www.cs.toronto.edu/~pekhimenko/courses/csc2224-f19/docs/GPU.pdf">Keckler, Dally, et al., IEEE Micro 2011</a>). That's the actual justification for TMA/TMEM/warp-group instructions above, moving data costs orders of magnitude more than computing on it, so that's always the real target.
+</p>
+<p>
+It's also why warp width became an energy lever, and NVIDIA and AMD took opposite routes on this. NVIDIA never widened the base warp, still 32 threads since Tesla, it widened what one instruction commands instead <code>wgmma.mma_async</code>/<code>tcgen05.mma</code> drive a whole 128-thread warp-group off one issue, TMA moves a tile off one thread's instruction, TMEM drops the register file from the accumulator's path. AMD's CDNA ran native Wave64 for years, the literal wider-group route, and is reversing it in CDNA5 (MI455X) back to Wave32/SIMD32, plus a tensor data mover that bypasses the register file, the same TMEM fix (<a href="https://www.servethehome.com/amd-instinct-mi455x-deep-dive-cdna-5-marks-the-next-era-of-instinct/3/">ServeTheHome, CDNA 5 deep dive</a>).
+</p>
+
+<h3 id="what-maiku-is">What is maiku</h3>
+<p>
+maiku is a cuTile kernel library built mostly for diffusion inference. Right now most of the kernels are tuned against the RTX PRO 6000 Blackwell. It's not trying to be a general kernel collection that covers everything torch already does. It also isn't tied to any single model. It exists because I liked the IR and I know the kernels won't be optimal given the limited control that you will have but it's faster to iterate on and it's fascinating what the compiler does (I'll try and dissect that later in the writeup), and that's the reason behind me writing all this.
 </p>
 <pre><code class="language-python">
 import maiku, torch
-
 x = torch.randn(1024, 3840, device="cuda", dtype=torch.bfloat16)
 w = torch.randn(3840, device="cuda", dtype=torch.bfloat16)
 
@@ -277,18 +337,13 @@ y = maiku.rms_norm(x, w)
 y = torch.compile(maiku.rms_norm, fullgraph=True)(x, w)   # no graph break
 </code></pre>
 <p>
-That second line is why the library is built the way it is. <code>maiku.rms_norm</code> is <code>torch.ops.maiku.rms_norm_fwd</code>, with a fake implementation and an autograd rule, so it's opaque to Dynamo instead of something <code>torch.compile</code> has to trace through. Here's why that matters: a <code>custom_op</code> body runs below the autograd dispatch key, so wrapping a cuTile launch in a plain <code>torch.autograd.Function</code> and calling <code>.apply()</code> inside a traced region builds a graph that gets thrown away. The output doesn't require grad, backward returns nothing, and nothing errors at the call site. Wrong answer, not a slow one, and it's the kind of bug a forward-only test suite never catches.
+That second line is the reason the library is built the way it is. <code>maiku.rms_norm</code> is a real <code>torch.ops.maiku.rms_norm_fwd</code> custom op, not a <code>torch.autograd.Function</code> wrapper around one. A <code>custom_op</code> body runs below the autograd dispatch key. Call a <code>Function</code>'s <code>.apply()</code> from inside one and the backward graph it builds gets discarded right there, the operator's output silently stops requiring grad, and every backward through that kernel comes back empty instead of raising. It's a real wrong-answer failure during backward, not a slow path. Keeping the <code>Function</code> wouldn't have gotten <code>fullgraph=True</code> working anyway. <code>ct.launch</code> itself isn't traceable, and neither is the launcher's own host-side tile-size arithmetic. Wrapping the whole launcher behind one operator hides all of that behind a single opaque boundary instead of leaving it exposed for <code>torch.compile</code> to trip over.
 </p>
 <p>
-Under that sits a second layer, <code>maiku.ops.&lt;name&gt;</code>, dispatch across the handful of ops where more than one backend genuinely competes: cuTile, a TileLang backend, a torch reference, each with its own <code>supports()</code> check and priority. One rule keeps the two layers from fighting: a dispatched call always goes through the registered operator, never straight to the kernel launcher. An unsupported shape is just <code>supports()</code> returning false, cheap, expected. A kernel that claims a shape and then raises is a bug, and it gets disabled for the rest of the process instead of retried on every call.
+Under that sits a second layer called <code>maiku.ops.&lt;name&gt;</code>. It dispatches across the handful of ops where more than one backend can compete for the same op right now, that's cuTile against a TileLang backend against a plain torch reference (this is very much in progress right now). Each backend registers its own <code>supports()</code> check and a priority, and the dispatcher picks whichever one claims the shape first.
 </p>
 
-<div class="gif-container">
-    <img src="./assets/maiku/fig3-dispatch-stack.svg" alt="stack diagram of maiku's three call surfaces: L2b, maiku dot ops and dispatch, calls L1 directly; L1, torch dot ops dot maiku, launches L0, the cuTile kernel; a dashed edge shows L2b never calls L0 directly" decoding="async">
-    <p class="caption">maiku's three call surfaces, and the one rule holding them together: a dispatched call always goes through the registered operator, never straight to the kernel</p>
-</div>
-
-<p>What's actually in the kernel set:</p>
+<p>Here's what's actually in the kernel set (as of writing this).</p>
 <table>
   <thead>
     <tr><th>area</th><th>kernels</th></tr>
@@ -299,36 +354,25 @@ Under that sits a second layer, <code>maiku.ops.&lt;name&gt;</code>, dispatch ac
     <tr><td>attention</td><td>bidir_attn (bf16), fp8qk, mxfp8qk, sage_attn (INT8), sage_attn3 (NVFP4)</td></tr>
     <tr><td>GEMM</td><td>linear and fused linear_gelu / linear_swiglu in bf16, fp8, and MXFP8; group_gemm</td></tr>
     <tr><td>rotary</td><td>rope, rope_, rope_qk</td></tr>
-    <tr><td>samplers</td><td>euler_step, cfg_euler_step, ddpm_step, ddim_step, lerp</td></tr>
     <tr><td>quantization</td><td>per-tensor / per-token / per-channel fp8, MXFP8, NVFP4</td></tr>
     <tr><td>fused blocks</td><td>norm_qkv_fused, norm_ffn_swiglu, gate_res_add, z_image_transformer_block</td></tr>
-    <tr><td>caching</td><td>block-skip sigma measurement and schedules</td></tr>
   </tbody>
 </table>
 
-<p>A couple of these against the best available alternative, swept across shapes:</p>
+<p>Here are a couple of these swept across shapes against the best available alternative. cuBLAS does suck on sm_120 though so keep that in mind.</p>
 
-<div class="gif-container">
+<div class="gif-row">
     <img src="./assets/maiku/bench_linear_swiglu.png" alt="bar chart comparing cuTile fused linear_swiglu against two-GEMM cuBLAS plus eager or cuTile SwiGLU, across six shapes from 512x768x3072 to 4096x4096x4096, on RTX PRO 6000" decoding="async">
-    <p class="caption">linear_swiglu: fusing the activation into the GEMM epilogue wins big at small M, ties at large M where the GEMM itself dominates</p>
-</div>
-
-<div class="gif-container">
     <img src="./assets/maiku/bench_linear_fp8.png" alt="bar chart comparing cuTile fp8 GEMM against cuBLAS scaled_mm fp8, cuTile bf16, and cuBLAS bf16, across four shapes, on RTX PRO 6000" decoding="async">
-    <p class="caption">linear_fp8: the one GEMM where cuTile meets the vendor path directly, beats torch's <code>_scaled_mm</code> at three of four shapes tested</p>
+</div>
+<div class="caption-row">
+    <p class="caption">linear_swiglu: fusing the activation into the GEMM epilogue wins big at small M, ties at large M where the GEMM itself dominates</p>
+    <p class="caption">linear_fp8: the one GEMM where cuTile meets the vendor path directly, beats torch's _scaled_mm at three of four shapes tested</p>
 </div>
 
-<h4>Why not just use TileGym</h4>
+<h4>Where it actually stands</h4>
 <p>
-NVIDIA ships its own cuTile kernel library, TileGym. It's built for LLM inference, and a diffusion transformer is different enough that it shows fast: no AdaLN kernel, an attention loop that's causally biased even when you want bidirectional (every DiT block does), no cross-attention kernel, SwiGLU and its GEMM as separate launches instead of fused, and no backward kernels at all, which matters the moment training shows up. None of that is a knock on TileGym. It just isn't built for this.
-</p>
-<p>
-Modular's MAX is the harder comparison. It has real warp specialization and, on B200, TMEM-backed matmul, which sm_120 structurally can't reach. Kernel for kernel it's often faster. What closes the gap is that a diffusion pipeline's latency is mostly about how many steps it runs, not which kernel each step calls: on a FLUX.2-klein sized model, MAX only beat plain diffusers by 1.03 to 1.15x once step caching was in the picture, because skipping a step outright beats speeding it up.
-</p>
-
-<h4>Where it actually lands</h4>
-<p>
-The kernel-level wins matter less than the sum. On this card the patched Z-Image Turbo pipeline, a handful of kernel swaps, not a rewrite, runs at 1.16x the diffusers baseline, 1.42x with block-skip caching on top. The more interesting result is the negative one: the fully fused mega-kernel path, one launch per transformer block instead of a dozen, is slower than baseline here, 0.67 to 0.71x. <code>cuobjdump -res-usage</code> on the actual cubins says exactly why: the fused norm-into-triple-GEMM kernel sits at 255 registers per thread, the hard ceiling, and still spills 376 words to local memory at the row-tile width that fits, while the plain per-op GEMM it's competing against runs a tile eight times as wide at 168 registers with zero spill. Fusion isn't automatically a win. This library picks the fusions that pay off on this hardware, not every fusion it can find.
+The kernel-level wins matter less than the sum they add up to (<a href="https://x.com/blelbach/status/2093904507579007137?s=20">source</a>). Swapping a handful of maiku kernels into the Z-Image Turbo pipeline on this GPU gets 1.16x over the diffusers baseline (again not the most optimized kernels by any means). I also tried the more aggressive version, one fully fused mega-kernel per transformer block instead of a dozen separate launches, and that one loses to baseline, 0.67 to 0.71x. The fused norm-into-triple-GEMM kernel sits at 255 registers per thread, the hard ceiling on this hardware, and it still spills 376 words to local memory even at the narrowest row-tile width that compiles. The plain per-op GEMM it's replacing runs a tile eight times as wide at 168 registers and spills nothing. Fusion isn't automatically a win here. maiku only keeps the fusions that actually pay off on this hardware, not every fusion that's possible to write.
 </p>
 
 <div class="gif-container">
@@ -337,34 +381,31 @@ The kernel-level wins matter less than the sum. On this card the patched Z-Image
 </div>
 
 <p>
-This isn't a maiku-specific finding. The wider argument about whole-model megakernels playing out right now is the same shape: fusing everything into one launch runs into real limits (nonlinearities inside a distributed op block full fusion outright, and a hand-written megakernel is hard enough to write that teams often ship separately-optimized, separately-launched kernels instead and still win). NVIDIA's own answer on Rubin is a hardware one, tile-level dependency triggers that let a consumer kernel start the moment partial data is ready, which is PDL's idea pushed further into the hardware rather than solved by fusing the source. The counter-case is Cursor's Mixture-of-Kittens, a megakernel for MoE training that's 2.37x faster than the strongest public baseline by fusing communication into compute, a narrow, specific bottleneck, not a whole model block. maiku's own numbers land on the same side of that line: <code>rope_qk</code> and <code>gate_res_add</code>, two small, specific fusions, win; <code>norm_qkv_fused</code> and <code>norm_ffn_swiglu</code>, fusing a whole norm-into-GEMM chain, lose. Selective fusion of one real bottleneck keeps paying off. Fusing everything because you can doesn't.
+This isn't just a maiku specific finding either. The wider argument about whole model megakernels going on right now runs into the same shape. Fusing everything into one launch hits real limits. A nonlinearity sitting inside a distributed op can block full fusion outright, and a hand written megakernel is hard enough to get right that teams often ship separately optimized, separately launched kernels instead and still come out ahead overall. NVIDIA's answer on Rubin looks like a hardware one rather than a fusion one, tile-level dependency triggers that let a consumer kernel start the moment partial data is ready. That reads like PDL's idea pushed further into the hardware, instead of being solved by fusing the source together. The counter-case worth naming is Mixture-of-Kittens (<a href="https://github.com/cursor/mixture-of-kittens">source</a>), a megakernel for MoE training that lands 2.37x faster than the strongest public baseline by fusing communication into compute. That's a narrow, specific bottleneck though, not a whole model block. maiku's own numbers land on the same side of that line, even inside this one mega-kernel experiment. <code>gate_res_add</code> is the smallest and simplest of the four fusions tested here and it comes closest to breaking even, 0.92x. <code>norm_qkv_fused</code> and <code>norm_ffn_swiglu</code> fuse a whole norm into GEMM chain instead and lose badly, 0.56x to 0.74x. The bigger the fusion the more it costs on this hardware, not the other way around, or maybe I'm just less educated on the megakernel front, I do see <a href="https://blog.luminal.com/p/compiling-models-to-megakernels/comment/199717022">Luminal</a> doing some good work there, and <a href="https://arxiv.org/pdf/2512.22219">a related paper on mega-kernelizing tensor programs</a> worth reading on the same subject.
 </p>
 
 <div class="gif-row">
-    <img src="./assets/maiku/zimage_dense.png" alt="Z-Image Turbo output, dense diffusers baseline, aerial skyline at sunset" loading="lazy" decoding="async">
-    <img src="./assets/maiku/zimage_patched.png" alt="Z-Image Turbo output, patched cuTile pipeline, same prompt and seed, same aerial skyline at sunset" loading="lazy" decoding="async">
+    <img src="./assets/maiku/zimage_stock.png" alt="Z-Image Turbo output, stock diffusers baseline, backlit portrait in white fabric" loading="lazy" decoding="async">
+    <img src="./assets/maiku/zimage_fp8.png" alt="Z-Image Turbo output, fp8 cuTile pipeline, same prompt and seed" loading="lazy" decoding="async">
+    <img src="./assets/maiku/zimage_mxfp8.png" alt="Z-Image Turbo output, mxfp8 cuTile pipeline, same prompt and seed" loading="lazy" decoding="async">
+    <img src="./assets/maiku/zimage_hybrid.png" alt="Z-Image Turbo output, hybrid precision cuTile pipeline, same prompt and seed" loading="lazy" decoding="async">
+    <img src="./assets/maiku/zimage_mega.png" alt="Z-Image Turbo output, fully fused mega-kernel pipeline, same prompt and seed" loading="lazy" decoding="async">
 </div>
-<p class="caption">Z-Image Turbo, same prompt and seed [dense | patched, 1.16x faster]</p>
+<p class="caption">Z-Image Turbo, same prompt and seed, left to right: stock, fp8, mxfp8, hybrid, mega-kernel, the mega-kernel path is slower (see above) but not visibly different</p>
 
-<div class="gif-row">
-    <img src="./assets/maiku/krea_bf16.png" alt="Krea 2 Turbo output, bf16 reference, fox in snow" loading="lazy" decoding="async">
-    <img src="./assets/maiku/krea_fp8.png" alt="Krea 2 Turbo output, fp8 quantized cuTile pipeline, same prompt and seed, fox in snow" loading="lazy" decoding="async">
-</div>
-<p class="caption">Krea 2 Turbo, same prompt and seed [bf16 reference | fp8, cuTile kernels]</p>
-
-<h3>swiglu: the fastest byte is the one you don't move</h3>
+<h3 id="swiglu">Disecting SwiGLU</h3>
 <p>
-SwiGLU splits an interleaved <code>[M, 2N]</code> tensor into a gate half and an up half, then computes <code>SiLU(gate) * up</code>. maiku's kernel does that in 24.8 microseconds at 4096x3840. Calling <code>maiku.swiglu</code> took 135.8.
+SwiGLU splits an interleaved <code>[M, 2N]</code> tensor into a gate half and an up half, then computes <code>SiLU(gate) * up</code>. maiku's kernel does that in 24.8 ms at 4096x3840. Calling <code>maiku.swiglu</code> took 135.8.
 </p>
 <p>
-That gap, 111 microseconds, isn't dispatch, dispatch on this box is around 6. It's two lines in the wrapper, before the kernel even runs:
+That gap, 111 ms, isn't dispatch, dispatch on the box was around 6ms. It's two lines in the wrapper, before the kernel even runs:
 </p>
 <pre><code class="language-python">
 gate = x[:, :n].contiguous()
 up   = x[:, n:].contiguous()
 </code></pre>
 <p>
-Both are views into the same buffer, sliced on the last dimension, and both get copied before the kernel sees them: 63 MB of copy in front of a kernel that moves 94 MB total. The kernel never needed either copy. <code>x[:, :n]</code> and <code>x[:, n:]</code> are strided views of one tensor, and a <code>tensor_view</code> in Tile IR carries its own shape and stride, which is exactly what lets the compiler consume the slice directly, no physically contiguous buffer required. cuTile takes strided arrays directly. The <code>.contiguous()</code> calls were doing nothing. One upfront <code>.contiguous()</code> on <code>x</code> (free, since <code>x</code> is already contiguous at these shapes) took the public call from 0.14x of torch to 0.76x, kernel unchanged: 5.50x, and none of it came from the kernel.
+Both are views into the same buffer, sliced on the last dimension, and both get copied before the kernel sees them around 63 MB of copy in front of a kernel that moves 94 MB total. <code>x[:, :n]</code> and <code>x[:, n:]</code> are strided views of one tensor, and a <code>tensor_view</code> in Tile IR carries its own shape and stride, which is exactly what lets the compiler consume the slice directly, no physically contiguous buffer required. cuTile takes strided arrays directly. The <code>.contiguous()</code> calls were doing absolutly nothing. One upfront <code>.contiguous()</code> on <code>x</code> (free, since <code>x</code> is already contiguous at these shapes) took things back to 24.8ms. The point of this little story is its not always a better DSL or a better computation model sometimes its little things hiding in the corner somewhere.
 </p>
 
 <div class="gif-container">
@@ -373,76 +414,48 @@ Both are views into the same buffer, sliced on the last dimension, and both get 
 </div>
 
 <p>
-It stayed hidden because of what it was compared against. Against torch eager the kernel looked mediocre, not obviously broken. Against <code>torch.compile</code>'s fused Triton kernel, which has no equivalent copy, the same numbers looked wrong. Whatever baseline you pick decides which bugs you can see, and <code>geglu</code>, built on the same split, had the same bug in eight places before anyone looked.
-</p>
-<p>
-The nsys capture backs all of this exactly. One buggy call: two <code>elementwise_kernel</code> copies at 48.8µs and 48.0µs, then the real kernel at 36.7µs, ≈133µs total. One fixed call: the same kernel alone, 23.7µs, copies gone entirely. Correlation IDs in the trace tie each kernel bar back to the exact <code>cudaLaunchKernel</code> that issued it, not just proximity on the timeline.
-</p>
-<p>
-One more thing the capture caught that the story above doesn't say: the real kernel itself isn't quite the same speed in both captures, 35.0µs in the buggy run against 23.7µs in the fixed one, same cubin, same shape. The difference is L2. The two 31 MB copies run immediately before the kernel and evict it out of cache, so the buggy kernel reads cold while the fixed one reads warm. Removing the copies doesn't just remove copy time, it also makes the real kernel faster, for the same reason the hardware section opened on: at these shapes the tensors live in L2, and anything that touches L2 in between costs the next kernel too.
-</p>
-<p>
-SASS confirms the load path directly: two <code>LDG.E.128</code> instructions, 128-bit vectorized, addresses computed by <code>LEA</code> off the stride, not a TMA descriptor. The strided slice never needed TMA to skip the copy, ordinary vectorized loads were already enough once the copy was gone. <code>REG:32, STACK:0</code>, no spill. Every element in the tail is handled by predication, not a branch: the bounds check sets <code>P0</code> once, and the load itself is <code>@!P0 LDG.E.128</code>, an out-of-bounds lane just doesn't issue it, no divergent path for the boundary tile.
+Two <code>elementwise_kernel</code> copies at 50µs each, then the real kernel at 34µs, ≈134µs total.
 </p>
 
 <div class="gif-container">
-    <img src="./assets/maiku/perfetto_swiglu_buggy.png" alt="Perfetto UI timeline loaded directly from the nsys sqlite export for the buggy swiglu run, thread 1 shows the host runtime API calls, thread 7 shows the GPU kernels: two void elementwise_kernel copies then the real fwd kernel, repeating with almost no gap between bars" decoding="async">
-    <p class="caption">this is the actual Perfetto UI (ui.perfetto.dev) with the buggy run's kernel trace loaded, not a redraw. Thread 7 is the GPU queue: copy, copy, real kernel, back to back</p>
+    <img src="./assets/maiku/nsys_swigly_capture.png" alt="real nsys timeline of the buggy swiglu run: two elementwise_kernel copies then the real fwd kernel, repeating back to back with almost no gap between them" decoding="async">
+    <p class="caption">the real nsys capture, buggy run: two copy kernels then the real kernel, back to back, this is where the ≈133µs total and the 35.0µs kernel-only number above actually come from</p>
 </div>
 
-<div class="gif-container">
-    <img src="./assets/maiku/perfetto_swiglu_fixed.png" alt="Perfetto UI timeline for the fixed swiglu run, thread 7 shows only the real fwd kernel repeating, with visible white gaps between bars where thread 1's host runtime overhead now dominates instead of GPU copy kernels" decoding="async">
-    <p class="caption">same UI, fixed run: the copy kernels are gone from thread 7 entirely, and the gaps between bars widen relative to the kernel itself because there's less GPU work now to hide the host loop behind</p>
+<p>
+One more thing the real kernel itself isn't quite the same speed in both captures, 34µs in the buggy run against 23.7µs in the fixed one, same cubin, same shape. The difference is L2. The two 31 MB copies run immediately before the kernel and evict it out of cache, so the buggy kernel reads cold while the fixed one reads warm. Removing the copies doesn't just remove copy time, it also makes the real kernel faster, cause at these shapes the tensors live in L2, and anything that touches L2 in between costs the next kernel too.
+</p>
+<p>
+Dumping the SASS confirms the load path, two <code>LDG.E.128</code> instructions 128-bit vectorized, off the row stride not a TMA descriptor, the same either way once the copy was gone. <code>REG:32, STACK:0</code> no spills. The tail is handled by predication and not a branch, an out-of-bounds lane just doesn't issue the load.
+</p>
+
+<p>
+One more thing worth naming since it connects to something else in this post: the reciprocal inside SiLU's sigmoid isn't a hardware divide, <code>MUFU.RCP</code> plus two rounds of Newton-Raphson refinement, with an <code>FCHK</code> predicate falling through to <code>$__cuda_sm3x_div_rn_noftz_f32_slowpath</code> when the fast path isn't accurate enough. That's the identical shared subroutine the fdiv finding in "what cuTile cannot do" hits for a literal <code>/</code>. cuTile doesn't special-case division, a <code>/</code> written in source and a reciprocal hiding inside <code>sigmoid</code> route through the same fast-path-plus-IEEE-fallback pattern.
+</p>
+<p>
+Real cost of being memory-bound is that the dominant stall by a wide margin is Stall Long Scoreboard, warps waiting on an L1TEX/global-memory dependency, about 8.3 of the 12.3 cycles between issued instructions, 67% of the total. What compute the kernel does do leans on the slow path too, the transcendental pipe, <code>MUFU.EX2</code> and <code>MUFU.RCP</code>, is the single busiest pipe in the whole kernel, busier than plain FMA. The scheduler numbers make the cost concrete. Out of a theoretical ceiling near 12 warps per scheduler, this kernel keeps about 3.55 active on average, and of those only 0.38 are actually eligible to issue on any given cycle. No warp eligible at all 71% of the time. Not a resource ceiling, this kernel's own register and shared-memory footprint barely constrains it, just not enough concurrent work in flight to hide the wait.
+</p>
+
+<div class="gif-row">
+    <img src="./assets/maiku/swiglu_scheduler_stats.png" alt="real ncu Scheduler Statistics for the swiglu kernel: Active Warps Per Scheduler 3.55, Eligible Warps Per Scheduler 0.38, No Eligible 71.24%, and the Warps Per Scheduler bar chart showing GPU Maximum and Theoretical both near 12 warps against an achieved Active of 3.55" decoding="async">
+    <img src="./assets/maiku/swiglu_pipe_utilization.png" alt="real ncu Pipe Utilization for the swiglu kernel, percent of peak instructions executed over elapsed cycles, XU is the tallest bar ahead of FMA, LSU, ALU, and everything else" decoding="async">
+</div>
+<div class="caption-row">
+    <p class="caption">real ncu Scheduler Statistics: theoretical ceiling near 12 warps per scheduler, 3.55 actually resident, 0.38 eligible to issue on any given cycle</p>
+    <p class="caption">real ncu Pipe Utilization: XU, the transcendental pipe behind MUFU.EX2/MUFU.RCP, is the busiest pipe in the kernel, ahead of plain FMA</p>
 </div>
 
-<p class="caption" style="text-align:left; margin-top:-0.5rem;">selecting the buggy run's kernel region in Perfetto and reading the area-selection table back gives the same numbers by construction, since both come from the same CUPTI_ACTIVITY_KIND_KERNEL table: 22 slices across three reps, 15 <code>void at::native::elementwise_kernel</code> copies and 7 real kernel launches, ~96% GPU-busy. The fixed run's ~74% busy figure comes from the same table query on the fixed capture. Not a mockup, this is the real CUPTI kernel trace read straight out of the tool built for reading it.</p>
-
+<h3 id="linear-mxfp8">linear_mxfp8: what it does, and what it doesn't beat</h3>
 <p>
-That second number is worth sitting with rather than explaining away. Fixing the bug didn't just remove 111µs of copy, it also shrank the gap the GPU sits idle between launches, from 137.2µs down to 32.8µs per rep, but the *fraction* of that shorter cycle spent idle went up, from about 1.2% to about 9%. Three kernels per rep pack a queue tightly almost by accident; one short kernel exposes the host-side loop overhead that was always there, just hidden behind more GPU work before. Same shape of finding as the small-M dispatch story elsewhere in this post, now visible directly in a real trace instead of inferred from wall-clock numbers.
-</p>
-<p>
-The SiLU math itself is a small assembly essay on its own. <code>e^-x</code> goes through the fast transcendental unit rather than a general exponential: <code>FMUL R2, R6, -1.4426950216293334961</code> scales by <code>-log2(e)</code> so a single <code>MUFU.EX2</code> computes <code>2^(-x·log2 e) = e^-x</code>. Before that, a range check extends <code>MUFU.EX2</code>'s accurate domain for very negative <code>x</code>: <code>FSETP.GEU.AND P0, PT, R2, -126, PT</code> tests whether the scaled argument is in range, and if not, the kernel halves the argument, computes <code>2^(x/2)</code>, and squares the result back (<code>exp2(2h) = exp2(h)²</code>), a real, deliberate range-reduction trick, not an accident of codegen.
-</p>
-<p>
-The reciprocal for `1/(1+e^-x)` is Newton-Raphson, not a hardware divide: `MUFU.RCP` gives a low-precision seed, two rounds of `FFMA` refine it, and an `FCHK` predicate decides whether that fast path is accurate enough. When it isn't, execution falls through to <code>$__cuda_sm3x_div_rn_noftz_f32_slowpath</code>, the exact same shared subroutine the fdiv finding in "what cuTile cannot do" runs into for a literal `/`. cuTile doesn't special-case division; a `/` written in source and a reciprocal hiding inside `sigmoid` both route through the identical fast-path-plus-IEEE-fallback pattern:
+Block-scaled MXFP8 GEMM. e4m3 elements, one e8m0 scale, a plain power-of-two exponent, per 32 elements along K. The quantizer gets that scale from the block's amax without a single transcendental call, a bitcast, a shift, an add, cheap enough to be free next to the GEMM itself. On the GEMM side the tile arrives through TMA, double-buffered, two SMEM stages, one full and being consumed by the tensor core while the other refills:
 </p>
 <pre><code class="language-sass">
-MUFU.RCP R0, R23 ;
-FCHK P1, R22, R23 ;
-FFMA R3, -R23, R0, 1 ;
-FFMA R0, R0, R3, R0 ;
-@!P1 BRA `(.L_x_3) ;
-CALL.REL.NOINC `($__internal_0_$__cuda_sm3x_div_rn_noftz_f32_slowpath) ;
+UTMALDG.2D [UR28], [UR10], desc[URZ] ;
+SYNCS.ARRIVE.TRANS64 RZ, [UR12+0xb008], R4 ;
+SYNCS.PHASECHK.TRANS64.TRYWAIT P0, [UR12+0xb028], R3 ;
 </code></pre>
 <p>
-This block, guard and all, repeats eight times, once per unrolled element, each with its own <code>FCHK</code> and its own potential fallback call. Then the actual SwiGLU multiply runs, gate's sigmoid times gate times up, and the eight fp32 results get packed back to bf16 two at a time with <code>F2FP.BF16.F32.PACK_AB</code> before one predicated <code>STG.E.128</code> writes the tile out. Nothing here is what a textbook description of "compute SiLU, multiply, store" would predict in instruction count, and all of it is checkable in the same file swiglu's load claim was checked against.
-</p>
-
-<h3>linear_mxfp8: why this library exists</h3>
-<p>
-Every kernel up to this point is maiku matching something torch can already do. <code>linear_mxfp8</code> is different, torch has no MXFP8 kernel, its best option is dequantize and hand off to cuBLAS. Against that, maiku wins clearly at every shape tested:
-</p>
-<table>
-  <thead>
-    <tr><th>M, K, N</th><th>maiku</th><th>torch's best</th><th>gain</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>1024, 3840, 3840</td><td>95.3 µs</td><td>247.1 µs</td><td>2.59x</td></tr>
-    <tr><td>4096, 3840, 10240</td><td>726.5 µs</td><td>1468.4 µs</td><td>2.02x</td></tr>
-    <tr><td>4608, 6144, 6144</td><td>808.1 µs</td><td>1776.9 µs</td><td>2.20x</td></tr>
-  </tbody>
-</table>
-<p>
-MXFP8 is e4m3 elements with one e8m0 scale, a plain power-of-two exponent, per 32 elements along K. The quantizer's best line doesn't call a transcendental at all:
-</p>
-<pre><code class="language-python">
-f     = amax / 448                                          # fp32
-bits  = bitcast(f, uint32)
-byte  = ((bits >> 23) & 0xFF) + (bits & 0x7FFFFF != 0)       # ceil pow2 exponent
-inv   = exp2(127 - byte)                                     # 1/scale, exact
-</code></pre>
-<p>
-An e8m0 byte is just a biased fp32 exponent, and that exponent is already sitting in the bit pattern, so the whole thing is a shift, a mask, a compare, not <code>MUFU.lg2</code> then <code>MUFU.ex2</code> on the amax. SASS confirms exactly this split: the byte extraction lowers to <code>SHF.R.U32.HI</code> (the shift), two <code>LOP3</code> masks, and an <code>ISETP.NE</code> for the mantissa check, no <code>MUFU.LG2</code> anywhere in the kernel. The 30 <code>MUFU.EX2</code> instructions that are in there belong to the very next line, the reciprocal <code>exp2(127 - byte)</code>, not the extraction. Two different lines, two different costs, and the SASS keeps them separate exactly the way the source does. That extraction pattern repeats eight times at regular intervals through the file, once per unrolled element, not a one-off. The `amax` it feeds isn't computed with Blackwell's `REDUX` reduction instruction, which exists but is integer-only; it's a two-step warp-shuffle butterfly, `SHFL.BFLY` at distances 2 then 1, a small 4-lane max-reduction rather than a full 32-lane one, consistent with each thread already owning several elements before the final combine. Rounding the scale up instead of to nearest is what makes it safe: the e4m3 cast can never go over 448, its max value, so the block max never clips. On the GEMM side, the CUTLASS blocked scale layout is an affine permutation of plain row-major, so the quantizer writes scale bytes straight into place instead of repacking afterward.
+The K-loop itself is fully unrolled, no branch back, and the compiler warp-specializes it without being asked, one warp-group dropped to 32 registers, another grown to 224 via real <code>USETMAXREG.TRY_ALLOC.CTAPOOL</code>/<code>DEALLOC.CTAPOOL</code> instructions, nothing in the Python source requested this.
 </p>
 
 <div class="gif-container">
@@ -451,45 +464,168 @@ An e8m0 byte is just a biased fp32 exponent, and that exponent is already sittin
 </div>
 
 <p>
-The tuning connects back to the hardware section. The wide CGA cluster that helps a plain bf16 or fp8 GEMM hurts this one: the usual config, a 256-wide tile split across two CTAs at occupancy 4, measures 132.5 microseconds on this card. The one that actually wins is narrower and un-clustered, 128-wide, one CTA, occupancy 2, at 96.2. <code>cuobjdump -res-usage</code> on both compiled kernels turns "the likely reason" into a measured one:
+Real numbers against real baselines, three shapes, same card. <code>torch._scaled_mm</code> has a native block-scaled MXFP8 path, and <a href="https://github.com/Dao-AILab/quack">Quack</a> ships one too. maiku doesn't win against either, at any shape:
 </p>
-
-<div class="gif-container">
-    <img src="./assets/maiku/mxfp8_reg_budget.png" alt="bar chart comparing registers per thread and shared memory per CTA between the winning TN128 NCTAS1 OCC2 config and the losing TN256 NCTAS2 OCC4 config for linear_mxfp8, the losing config uses more of both and its shared memory bar is flagged with a register spill" decoding="async">
-    <p class="caption">the losing config isn't just tighter on registers and shared memory, it spills: STACK:344 vs STACK:0, from real cuobjdump -res-usage on both compiled kernels</p>
+<table>
+  <thead>
+    <tr><th>M, K, N</th><th>maiku</th><th>native <code>_scaled_mm</code></th><th>Quack</th><th>maiku vs best</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1024, 3840, 3840</td><td>96.7 µs</td><td>90.6 µs</td><td>86.0 µs</td><td>1.12x slower</td></tr>
+    <tr><td>4096, 3840, 10240</td><td>741.8 µs</td><td>488.1 µs</td><td>478.0 µs</td><td>1.55x slower</td></tr>
+    <tr><td>4608, 6144, 6144</td><td>827.0 µs</td><td>535.4 µs</td><td>537.0 µs</td><td>1.54x slower</td></tr>
+  </tbody>
+</table>
+<p>
+The gap widens with size, not shrinks. cuTile's automatic scheduling was never going to match hand-tuned CuTe-DSL on its own ground; what's worth having is where the gap comes from.
+</p>
+<p>
+Real <code>ncu</code> on both kernels, same shape, says Quack isn't winning by avoiding register and shared-memory pressure, it's spending more of both and still coming out ahead, because what it's spending them on is overlap: one TMA-load warp-group plus two compute warp-groups, pingpong scheduling, one tile's epilogue running against the next tile's mainloop instead of the two running back to back. Lower theoretical occupancy, higher achieved, the inversion is real, not a rounding artifact:
+</p>
+<div class="gif-row">
+    <img src="./assets/maiku/ncu_occupancy_maiku.png" alt="maiku Occupancy page: Theoretical 33.33%, Achieved 20.22%, Block Limit Registers 2, Block Limit Shared Mem 2, Block Limit Warps 6, Block Limit SM 24" decoding="async">
+    <img src="./assets/maiku/ncu_occupancy_quack.png" alt="Quack Occupancy page: Theoretical 25%, Achieved 18.63%, Block Limit Registers 1, Block Limit Shared Mem 1, Block Limit Warps 4, Block Limit SM 24" decoding="async">
 </div>
-
+<div class="caption-row">
+    <p class="caption">maiku: higher ceiling, 33.33% theoretical, but only reaches 60.7% of its own ceiling</p>
+    <p class="caption">Quack: lower ceiling, 25% theoretical, but reaches 74.5% of its own ceiling, register-limited to one block per SM either way</p>
+</div>
 <p>
-128 registers and 46 KB of shared memory at the winning config, zero spill. 168 registers and 68 KB at the losing one, and it spills 344 words to local memory on top of the extra pressure, the CGA cluster doesn't just get tight here, it runs out of room. And the tensor-core instruction itself confirms the block-scaled path is doing real extra work per MMA: <code>QMMA.SF.16832.F32.E4M3.E4M3.E8</code>, the scale-factor variant of `QMMA`, not plain <code>HMMA</code>/<code>QMMA</code>. The full form carries the scale operands directly in the instruction:
+The SASS diff says exactly what that overlap costs, and where cuTile can't follow. Both kernels dispatch through the identical <code>QMMA.SF.16832.F32.E4M3.E4M3.E8</code>, so the gap isn't a better MMA instruction, it's what surrounds it. Quack's kernel carries a real async handoff primitive maiku's never emits, 4x <code>BAR.ARV</code>, arrive-without-wait, against zero in maiku's. Named-barrier traffic roughly doubles overall, 19x <code>BAR.SYNC.DEFER_BLOCKING</code> against maiku's 9. TMA reaches further too, <code>UTMALDG.3D</code> and <code>.4D</code> alongside plain 2D, where maiku only ever emits <code>UTMALDG.2D</code>. None of these are exotic instructions maiku's compiler can't reach, cuTile's own kernels already use <code>BAR.SYNC</code> and <code>USETMAXREG</code> unprompted. What's missing is asking for a specific pattern: no op in the public dialect places a named-barrier arrive-without-wait by hand, no way to write "two consumer groups, alternate tiles, hand off async" the way CuTe-DSL lets Quack's author write it directly.
 </p>
-<pre><code class="language-sass">
-QMMA.SF.16832.F32.E4M3.E4M3.E8 R68, R172, R8, R68, R179, R197, URZ
+<p>
+That gap isn't tunable and isn't an oversight, both checked directly rather than assumed. Tunable: swept <code>num_worker_warps</code>, the only lever aimed at this, alone and combined with <code>num_ctas</code>/<code>occupancy</code>/<code>opt_level</code>, against the shipped auto config, same shape. Every explicit override was slower, up to 2.4x, and its SASS still carries zero <code>BAR.ARV</code>. Oversight: no, an NVIDIA maintainer confirmed it directly on <a href="https://github.com/NVIDIA/cutile-python/issues/12">cutile-python issue #12</a>, "Pipelining & warp specialization strategies are not exposed in the DSL... Direct control over these primitives is not exposed in the DSL." The dialect that would need the op is open, Apache-2.0, but the compiler that would need to do anything with it, <code>tileiras</code>, is closed. Not a gap the open pieces alone can fix.
+</p>
+
+<h4>The second gap: not a missing primitive, a missing load path</h4>
+<p>
+The warp-specialization gap above is cuTile's compiler having no op to reach for. This one is different: cuTile has the op, the kernel just never uses it for one specific tensor. Start from the top and read down through <code>ncu</code>'s own pages, same shape, same run.
+</p>
+<div class="gif-row">
+    <img src="./assets/maiku/ncu_sol_maiku.png" alt="maiku GPU Speed Of Light page: Compute 53.93%, Memory 85.53%, L1/TEX 42.77%, L2 85.53%, DRAM 6.85%, Duration 841.41us" decoding="async">
+    <img src="./assets/maiku/ncu_sol_quack.png" alt="Quack GPU Speed Of Light page: Compute 85.48%, Memory 74.04%, L1/TEX 45.46%, L2 74.04%, DRAM 10.87%, Duration 549.22us" decoding="async">
+</div>
+<div class="caption-row">
+    <p class="caption">maiku: memory-bound, 85.53% memory throughput against 53.93% compute, 841.41us</p>
+    <p class="caption">Quack: compute-bound, 85.48% compute throughput against 74.04% memory, 549.22us, 1.53x faster</p>
+</div>
+<p>
+Both kernels run the identical MMA instruction on the identical operands. maiku is memory-bound on a GEMM, which is backwards, DRAM sits at 6.85%, so it isn't bandwidth either, something inside the chip is the bottleneck. The memory chart names it directly:
+</p>
+<div class="gif-row">
+    <img src="./assets/maiku/ncu_memchart_maiku.png" alt="maiku memory chart: L1/TEX Hit Rate 2.29%, Global 2.46M instructions, TMA 619.52K instructions, 3.75-3.77 GB flowing L1 to L2" decoding="async">
+    <img src="./assets/maiku/ncu_memchart_quack.png" alt="Quack memory chart: L1/TEX Hit Rate 99.76%, Global 0 instructions, Local 614.40K instructions, TMA 327.68K instructions, 2.60 GB flowing L1 to L2" decoding="async">
+</div>
+<div class="caption-row">
+    <p class="caption">maiku: L1 hit rate 2.29%, and a real Global-load instruction count that shouldn't be nonzero on a TMA-fed GEMM at all</p>
+    <p class="caption">Quack: L1 hit rate 99.76%, zero Global-load instructions, every operand arrives through TMA or shared memory</p>
+</div>
+<p>
+That's the tell. maiku's main X and W tiles do arrive through TMA, staged into shared memory, pulled into registers through <code>LDSM.16.M88.4</code>, the efficient path, confirmed directly in the SASS. The scale tensors don't get the same treatment. <code>ncu</code>'s source counters name the exact lines:
+</p>
+<div class="gif-container">
+    <img src="./assets/maiku/ncu_srccounters_maiku.png" alt="maiku source counters: Uncoalesced Global Accesses, Est Speedup 92.57%, 36864000 excessive sectors, 94% of 39321600 total, top locations linear_kernel.py:379 and :384" decoding="async">
+    <p class="caption">linear_kernel.py:379 and :384, the XScale and WScale loads, 36.86M excessive sectors out of 39.32M total, 94%, est. speedup 92.57%</p>
+</div>
+<pre><code class="language-python">
+xs = ct.bitcast(ct.load(XScale, index=(bid_m, k), shape=(TM, TKS),
+                        padding_mode=zero, latency=1),
+                ct.float8_e8m0fnu)
+ws = ct.bitcast(ct.load(WScale, index=(k, bid_n), shape=(TKS, TN),
+                        order=(1, 0), padding_mode=zero, latency=1),
+                ct.float8_e8m0fnu)
 </code></pre>
 <p>
-A in R172 (reused across a whole row of these), B walking R8, R12, R16…, the accumulator aliased in as both source and destination, and two extra source registers, R179 and R197, carrying the E8M0 scale factors for A and B. 128 of these per K-loop at the winning config, 192 at the losing one, the wider tile issues more MMAs per iteration, which is more register-resident state per warp on top of what SFA/SFB already cost. Surrounding <code>LOP3.LUT</code>/<code>PRMT</code> instructions repack the raw uint8 scale bytes into those operand registers before each MMA. This is a real, distinct instruction, not <code>HMMA</code> wearing a different flag.
+Same <code>ct.load</code> call the X and W tiles use two lines above, different result. The compiled SASS for these two lines is <code>LDG.E.U8</code>, predicated, one byte at a time, straight from global memory, never staged through shared memory at all. Every other operand in this kernel goes through TMA. These two don't, and there's no knob in the public dialect to route them there, no way to tell <code>ct.load</code> "stage this one through shared memory like the others."
+</p>
+<p>
+Quack's author didn't get this for free either, CuTe-DSL is fully manual, every operand's placement is a choice the author makes explicitly, and Quack's own scale bytes are still not perfectly coalesced, <code>ncu</code> flags <code>LDS.U8</code> at a real four-byte stride, structurally the same access pattern maiku has. What's different is where it happens: shared memory, SRAM, tens of cycles, against maiku's global memory, hundreds of cycles. Same mistake, staged in the fast place instead of the slow one:
+</p>
+<div class="gif-container">
+    <img src="./assets/maiku/ncu_srccounters_quack.png" alt="Quack source counters: Uncoalesced Shared Accesses, Est Speedup 7.98%, 4915200 excessive wavefronts, 8% of 59683840 total, five addresses each at 6%" decoding="async">
+    <p class="caption">Quack's own version of the same bug class, on shared memory: 4.92M excessive wavefronts out of 59.68M, 8%, est. speedup 7.98%, an order of magnitude cheaper than maiku's 92.57%</p>
+</div>
+<p>
+The L1 thrash from maiku's uncoalesced global loads shows up again in the instruction stream. Both kernels compute the identical amount of real math, same M, K, N, same MMA instruction, and maiku executes 2.24x more instructions doing it:
+</p>
+<div class="gif-row">
+    <img src="./assets/maiku/ncu_instrmix_maiku.png" alt="maiku instruction mix: 240,358,311 executed instructions total, top instruction LOP3, then QMMA, PRMT, SHF, IADD, MOV, UMOV, LDSM, IMAD, UIADD3, ISETP" decoding="async">
+    <img src="./assets/maiku/ncu_instrmix_quack.png" alt="Quack instruction mix: 107,542,809 executed instructions total, QMMA dominates by a wide margin, then LDS, LOP3, LDSM, IMAD, MOV, UIADD3, IADD, SYNCS, SHF, BRA" decoding="async">
+</div>
+<div class="caption-row">
+    <p class="caption">maiku: 240,358,311 executed instructions, LOP3 outranks QMMA at the top of the list</p>
+    <p class="caption">Quack: 107,542,809 executed instructions, QMMA dominates outright, the shape a GEMM's instruction mix should have</p>
+</div>
+<p>
+LOP3 outranking QMMA is the byte-unpacking cost of pulling e8m0 scales out of predicated single-byte loads, not GEMM work. It also explains the live SASS window from earlier: with the scale bytes stuck behind a slow, uncoalesced global fetch, the compiler's only lever is to hoist every QMMA it can ahead of the next dependency, so they land back to back with nothing between them. Quack's scale bytes are already sitting in fast shared memory by the time they're needed, so the compiler doesn't need to hoist anything, and QMMA and LDS.U8 alternate tile by tile instead:
+</p>
+<div class="gif-row">
+    <img src="./assets/maiku/ncu_sass_maiku.png" alt="maiku SASS window: one PRMT, then eight consecutive QMMA.SF instructions with nothing between them, then predicated UIADD3, a conditional branch, then LOP3.LUT" decoding="async">
+    <img src="./assets/maiku/ncu_sass_quack.png" alt="Quack SASS window: LDSM matrix loads, then QMMA, LDS.U8, QMMA, LDS.U8 alternating tightly, with one SHF/LOP3 pair for scale unpacking mixed in" decoding="async">
+</div>
+<div class="caption-row">
+    <p class="caption">maiku: eight <code>QMMA.SF</code> back to back, the compiler hoisting everything it can ahead of the slow global fetch</p>
+    <p class="caption">Quack: <code>QMMA</code> / <code>LDS.U8</code> alternating tile by tile, nothing to hide because the data's already close</p>
+</div>
+<p>
+This gap is a different shape than the warp-specialization one. That one is real, checked, and closed off by the compiler, no lever in the public dialect reaches it. This one is a load a cuTile kernel author writes the same way as every other load in the file, and gets a completely different, much worse compiled result, with no visible reason why from the Python source and no diagnostic pointing back at it, only <code>ncu</code> after the fact says which two lines to look at. The two-orders-of-magnitude gap between maiku's 92.57% and Quack's 7.98% est. speedup on structurally the same access pattern is the actual measure of what routing a small auxiliary tensor through shared memory instead of leaving it on the direct global path is worth here, and it's most of what separates 53.93% from 85.48% compute throughput on this shape.
 </p>
 
+<h3 id="mxfp8qk-attention">mxfp8qk attention: fp8 Q/K, bf16 V, and what changes on sm_100</h3>
 <p>
-The full K-loop is a straight line, not a loop with a branch back. All 128 <code>QMMA.SF</code> instructions in the winning config sit at contiguous ascending addresses with nothing branching into the middle of that block, the compiler fully unrolled it. The real "loop" lives on the producer side instead: A and B tiles arrive through TMA, not plain loads, `UTMALDG.2D` paired with an explicit mbarrier phase check before each issue:
+mxfp8qk quantizes some of its operands and leaves others alone: Q and K go through MXFP8, V stays bf16. The SASS shows the split directly. QK<sup>T</sup> issues through <code>QMMA.SF.16832.F32.E4M3.E4M3.E8</code>, the same block-scaled instruction linear_mxfp8 uses, carrying its own SFA/SFB scale operands. PV issues through plain <code>HMMA.16816.F32.BF16</code> instead, no scale operands, because V was never quantized:
 </p>
 <pre><code class="language-sass">
-UTMALDG.2D [UR28], [UR10], desc[URZ] ;
-SYNCS.ARRIVE.TRANS64 RZ, [UR12+0xb008], R4 ;
-SYNCS.PHASECHK.TRANS64.TRYWAIT P0, [UR12+0xb028], R3 ;
+QMMA.SF.16832.F32.E4M3.E4M3.E8 R16, R40, R76, RZ, R185, R16, URZ ;
+HMMA.16816.F32.BF16 R72, R112, R36, R72 ;
 </code></pre>
 <p>
-That's real double buffering, an explicit arrive/phase-check pair around every TMA issue, not the generic "producer/consumer overlap" every GEMM writeup gestures at. It's also the direct opposite of swiglu's load path: swiglu's strided slice was small and simple enough that plain vectorized `LDG.E.128` was already optimal, no TMA needed. This kernel's A/B/scale tiles are TMA's actual use case, and that's what the compiler reaches for. The epilogue mirrors swiglu's bf16 repack (<code>F2FP.BF16.F32.PACK_AB</code>, same instruction family, confirming it's cuTile's shared conversion idiom rather than something GEMM-specific) but the store goes back out through TMA too, <code>UTMASTG.2D</code>, not a plain <code>STG</code>.
+Same kernel, two different tensor-core instruction families in the same K-loop, governed by what was actually quantized. The Q/K/V loads go through TMA at real rank, four instances of <code>UTMALDG.4D</code>, one per axis of <code>[B, H, S, D]</code>, unlike linear_mxfp8's <code>UTMALDG.2D</code>. And the same unrequested warp specialization shows up here too, the same two register budgets as linear_mxfp8's split on a kernel with a completely different operand mix, which says the split tracks shape, not something GEMM-specific.
 </p>
 <p>
-One more thing worth naming plainly: this kernel is warp-specialized, and the compiler did it without being asked, the opposite of what AdaLN showed. The SASS branches on a warp-group id (<code>UR16</code>) and repartitions the register file per group with real <code>USETMAXREG.TRY_ALLOC.CTAPOOL</code>/<code>USETMAXREG.DEALLOC.CTAPOOL</code> instructions, at least three distinct code paths at three different register budgets, one branch requesting up to 224 registers, another explicitly dropping to 32. "What cuTile cannot do" says there's no API to ask for warp specialization, and that's still true, AdaLN's cubin shows it really can be entirely absent. This kernel shows the other side: for a TMA-plus-tensor-core kernel, the compiler generates it anyway, on its own, with no Python-level knob that asked for it. Which kernel gets the implicit version and which doesn't isn't something this post can predict from source alone yet, only confirm after the fact in SASS.
+Real numbers at the shape this project actually runs, Z-Image DiT scale, B=1, H=24, Sq=Sk=4224, D=128. No Quack attention kernel exists to compare against, so the baseline here is torch SDPA's three backends:
+</p>
+<table>
+  <thead>
+    <tr><th>kernel</th><th>latency</th><th>vs maiku</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>maiku mxfp8qk</td><td>906.0 µs</td><td>—</td></tr>
+    <tr><td>SDPA, cuDNN backend</td><td>748.2 µs</td><td>maiku 1.21x slower (best)</td></tr>
+    <tr><td>SDPA, flash backend</td><td>794.2 µs</td><td>maiku 1.14x slower</td></tr>
+    <tr><td>SDPA, mem-efficient backend</td><td>1796.5 µs</td><td>maiku 1.98x faster</td></tr>
+  </tbody>
+</table>
+<p>
+Loses to the two backends that matter, beats the one that doesn't. Real <code>ncu</code> at this shape says why: 24.37–24.43% achieved occupancy against 33.33% theoretical, the same register-bound shortfall as the GEMM, and DRAM throughput of only ~3.10%, this problem stays L2-resident, so it isn't a bandwidth problem either. Not enough warps in flight to hide tensor-core latency, and no path in the public dialect to hand-place the async barrier traffic that would fix it, the same limitation linear_mxfp8 hits, confirmed on the maintainer issue cited there.
+</p>
+<p>
+None of the above is what this exact kernel becomes on sm_100, cross-compiled and never executed, sm_120 is the only device in this project. Where sm_120 issues <code>QMMA.SF</code>/<code>HMMA</code> out of the register file, sm_100 issues real <code>tcgen05</code>-family dispatch, every operand living in Tensor Memory, addressed as <code>tmem[...]</code>, through a real global descriptor operand:
+</p>
+<pre><code class="language-sass">
+UTCHMMA tmem[UR22], gdesc[UR12], tmem[UR7], tmem[UR18], idesc[UR19], UPT ;
+STTM.16dp32bit_t0_t15.x64 tmem[UR9], RZ ;
+LDTM.16dp32bit_t0_t15.x64 R4, tmem[UR12] ;
+</code></pre>
+<p>
+This is the exact instruction family the hardware section names for B200/SM10x from documentation, <code>tcgen05.mma</code>, accumulator in Tensor Memory, confirmed here on one specific kernel this project ships, not just asserted from a datasheet.
 </p>
 
-<h3>What cuTile cannot do</h3>
+<h3 id="what-cutile-cannot-do">What cuTile cannot do</h3>
 <p>
-cuTile is built for memory-bound work: row-wise kernels, GEMMs, anything where the win comes from moving fewer bytes or moving them from a nearer place. It has no explicit warp specialization, no named barriers, no manual TMA multicast or double buffering. The producer/consumer pattern that gives hand-written FA3 and cuDNN kernels their edge on compute-bound attention isn't something you can ask for in Python, and whether the compiler does it anyway isn't the same answer for every kernel, checking both instead of assuming either found a genuine split. AdaLN's forward compiles to 255 registers per thread, the backward to 128, no <code>SETMAXNREG</code> anywhere in either cubin. `linear_mxfp8`, TMA-plus-tensor-core shaped, is the opposite: real <code>USETMAXREG.TRY_ALLOC</code>/<code>DEALLOC</code> across at least three warp-group register budgets, entirely uninvited. No knob in cuTile's Python surface asks for either outcome, and nothing about the source predicts which kernel gets it. Confirmed only by actually reading the SASS, in both directions.
+cuTile is built for memory-bound work: row-wise kernels, GEMMs, anything where the win comes from moving fewer bytes or moving them from a nearer place. It has no explicit warp specialization, no named barriers, no manual TMA multicast or double buffering, and that's structural, not just under-documented: the open dialect has no op named TMA, no op named barrier, no op named warp group, anywhere. <code>UTMALDG.2D</code>, the mbarrier arrive/wait pair, <code>USETMAXREG</code>, none of them correspond to anything nameable in the public IR. The only levers are <code>latency=</code> and <code>allow_tma</code> (see the hardware section). <code>allow_tma=False</code> is the one real guarantee among them. Everything else, <code>latency</code> either way, <code>allow_tma=True</code>, is <code>tileiras</code> deciding on its own.
 </p>
 <p>
-A few gaps are concrete enough to name. Integer <code>pow</code> still throws <code>TileInternalError</code>, the float version works fine. <code>check_bounds=False</code> exists on <code>ct.gather</code>, <code>ct.scatter</code>, and the atomics, but not on <code>ct.load_advanced_indexing</code>, the one gather-shaped call maiku actually uses. <code>ct.barrier</code> semantics for multi-CTA cluster reductions are unclear enough to be an open issue. There's no native varlen support, no <code>cu_seqlens</code>, and no dynamic persistent tile scheduler, every grid is static.
+Whether the compiler does this anyway isn't the same answer for every kernel, and it tracks kernel shape, not the API surface: <code>linear_mxfp8</code>'s warp-group register split (further up) is real and automatic, AdaLN's backward emits the identical three-instruction <code>USETMAXREG</code> pattern, its forward a milder two, swiglu, flat and elementwise, has zero. No knob in cuTile asks for any of it either way.
+</p>
+<p>
+That control does exist in Python somewhere, just not here: <code>cuda.lang</code>, a separate SIMT-style compiler in the same repository, has real <code>mbarrier</code> and <code>tcgen05</code>/TMEM primitives and an explicit warp-specialized NVFP4 GEMM tutorial ported from CuTe. It doesn't go through Tile IR, targets PTX directly, and isn't documented as supported anywhere. Real, but not what this library is built on.
+</p>
+<p>
+A few gaps are concrete enough to name. Integer <code>pow</code> still throws <code>TileInternalError</code>, the float version works fine. <code>check_bounds=False</code> spread further than it used to, plain <code>ct.load</code>/<code>ct.store</code> got it too, on top of <code>ct.gather</code>, <code>ct.scatter</code>, and the atomics, but <code>ct.load_advanced_indexing</code>, the one gather-shaped call maiku actually uses, is now the single remaining holdout, not one option among several missing it. Where it does exist it's a real IR-level lever, not just a skipped runtime check: the compiled op drops its predicate-mask operand entirely rather than carrying a mask that's always true. <code>ct.barrier</code> semantics for multi-CTA cluster reductions are unclear enough to be an open issue. There's no native varlen support, no <code>cu_seqlens</code>, and no dynamic persistent tile scheduler, every grid is static.
+</p>
+<p>
+A few real capabilities sit on the other side of that list, present in the compiler and unused by anything in this post. <code>ct.scan</code> is a full, general associative parallel scan, a user-supplied combine function, an identity element, an optional reverse direction, cumsum and cumprod are just two instantiations of it, not a special case. cuTile ships its own real autotuner too, plain brute-force exhaustive search over a declared config space, capped by a hard <code>max_iter</code>, not a heuristic, with a real split between scratch arguments and launch arguments specifically so tuning an in-place kernel doesn't corrupt its own state between trials. And <code>ct.launch</code>'s <code>stream</code> argument takes a <code>torch.cuda.Stream</code>, a CuPy stream, a Numba CUDA stream, or a bare integer pointer from any of the three, interchangeably, real interop surface for anyone who ever needs to drop a cuTile kernel into a non-PyTorch pipeline.
 </p>
 <p>
 Looking inside the compiler is harder than it should be. <code>CUDA_TILE_DUMP_TILEIR</code> doesn't work on every build; <code>CUDA_TILE_LOGS=CUTILEIR</code> is the workaround that actually prints post-rewrite IR. Full validation needs a private extension nobody outside NVIDIA has. Printing Tile IR directly is its own open issue. There's a deeper hook than the env var, too: <code>cuda.tile._compiler.lower_to_ptx</code> can be monkey-patched to intercept the HIR graph before it becomes PTX at all, undocumented and unsupported, but real. Nobody ships anything built on it yet.
@@ -501,13 +637,13 @@ PDL is the obvious fix for a chunk of this: it closes the launch gap between sma
 AMD support doesn't exist and nothing is in flight toward it. <code>tileiras</code> is CUDA only, and nothing published points at a ROCm path. Whether that gap is worth closing depends on whether someone builds a Tile-IR-to-ROCm backend, the way Triton has one. Nobody's building it yet.
 </p>
 <p>
-None of this reads as instability. A deep audit against the compiler's own test suite found no correctness bugs: 5,999 of 6,429 tests passing, and every failure traced to an out-of-memory in the test harness's own tensor comparison, not the compiler. Upstream review mostly happens internally rather than through merged PRs, so the clearest evidence of real fixes landing is a specific commit, not a PR count: <code>c - a*b</code> and <code>a*b - c</code> both fold to one <code>fma</code> op at the Tile IR level and lower to a single <code>FFMA</code> with the negation folded into an operand, confirmed directly on this box.
+None of this reads as instability. A deep audit against the compiler's own test suite found no correctness bugs: 5,999 of 6,429 tests passing, and every failure traced to an out-of-memory in the test harness's own tensor comparison, not the compiler.
 </p>
 <p>
-A second claim doesn't hold up under the same check, and it's worth saying so rather than quietly dropping it: an earlier pass reported <code>x / C</code> for compile-time constant <code>C</code> getting strength-reduced to a plain multiply. On cuTile 1.5.0 / tileiras 13.3.36 it isn't. <code>y = x / 4.0</code> still emits the full IEEE division sequence, 296 instructions against 304 for a runtime divisor, barely fewer. The only concession to the constant is one hoisted <code>MUFU.RCP</code> instead of eight per-element ones. Whether that fix never shipped or shipped and regressed isn't knowable from here, but it doesn't hold on the toolchain this library actually runs on, and repeating an unverified fix would have been worse than not mentioning it at all.
+One assumption worth checking rather than repeating: strength-reducing <code>x / C</code> for a compile-time constant <code>C</code> to a plain multiply sounds like something any compiler would do. On cuTile 1.5.0 / tileiras 13.3.36 it doesn't. <code>y = x / 4.0</code> still emits the full IEEE division sequence, 296 instructions against 304 for a runtime divisor, barely fewer. The only concession to the constant is one hoisted <code>MUFU.RCP</code> instead of eight per-element ones.
 </p>
 
-<h3>What's next for maiku</h3>
+<h3 id="whats-next">What's next for maiku</h3>
 
 <h4>Comms kernels</h4>
 <p>
@@ -531,15 +667,48 @@ The chained-launch measurement, 1.07 to 1.73x, only tests independent kernels ba
 
 <h4>Dynamic scheduling for group_gemm</h4>
 <p>
-The current scheduler is static striding, which balances tiles fine when groups only vary in K and does nothing when both M and K vary, the real MoE case. Cluster Launch Control is the fix: a hardware work queue that lets CTAs pull tiles dynamically instead of walking a fixed stride. <code>sage_attn3</code>, maiku's NVFP4 attention kernel, is the other place this matters. It already runs the FP4 mainloop that FlashAttention 4's CuTe kernels can't reach on sm_120 (those kernels are sm_100 only), but its scheduler is a plain grid with no ordering and no persistence. Wrapping that mainloop in FA4-class scheduling, LPT ordering plus CLC plus L2-aware tile order, reaches a scheduler class FA4 itself can't run on this hardware.
+The current scheduler is static striding, which balances tiles fine when groups only vary in K and does nothing when both M and K vary, the real MoE case, each worker deriving its next tile from a formula instead of asking what's actually left to do. Cluster Launch Control is the fix, and it's a real, specific mechanism, not just "dynamic scheduling" in the abstract: a CTA that hasn't started yet asks the grid scheduler to cancel it and hand back a pending tile coordinate instead, hardware writes that answer, a coordinate or a clean "nothing left," into a 16-byte record in shared memory and signals it through an mbarrier, the same primitive already doing real work everywhere else in this post. The request gets issued before the current tile finishes, not after, so the wait hides behind compute the same way TMA's prefetch hides behind it. Blackwell-specific, Hopper doesn't have it. One real blocker sits in front of the launch-overhead half of that story regardless: CUDA graphs work for cuTile kernels today, including kernels that accumulate into an existing buffer across replays, but a list of tensors, exactly the calling convention <code>group_gemm</code> uses for its per-group arrays, is explicitly rejected inside graph capture, a real, named error, not a silent failure. The message says "isn't supported yet," which reads as a known gap rather than a permanent one, but it means wrapping <code>group_gemm</code> in a graph to remove its own launch overhead doesn't work today. <code>sage_attn3</code>, maiku's NVFP4 attention kernel, is the other place this matters. It already runs the FP4 mainloop that FlashAttention 4's CuTe kernels can't reach on sm_120 (those kernels are sm_100 only), but its scheduler is a plain grid with no ordering and no persistence. Wrapping that mainloop in FA4-class scheduling, LPT ordering plus CLC plus L2-aware tile order, reaches a scheduler class FA4 itself can't run on this hardware.
 </p>
 
-<div class="gif-container">
-    <img src="./assets/maiku/bench_group_gemm.png" alt="bar chart comparing cuTile group_gemm against bmm, loop-matmul, torch.compile, and torch.compile with cudagraph, across seven scenarios from MoE variable-M at G=4 to large compute-bound at G=4, on RTX PRO 6000" decoding="async">
-    <p class="caption">the persistent single-launch grouped GEMM already wins the MoE regime with today's static scheduler, up to 1.95x at G=32, CLC is the lever for the cases it still loses: small equal-shaped batches where bmm wins outright</p>
-</div>
+<table>
+  <thead>
+    <tr><th>scenario</th><th>cuTile</th><th>bmm</th><th>loop-matmul</th><th>compiled</th><th>compile-cudagraph</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>MoE variable-M, G=4</td><td><strong>52.7 µs</strong> (×1.59)</td><td>—</td><td>84.0 µs</td><td>84.1 µs</td><td>92.6 µs</td></tr>
+    <tr><td>MoE variable-M, G=8</td><td><strong>101 µs</strong> (×1.81)</td><td>—</td><td>182 µs</td><td>184 µs</td><td>270 µs</td></tr>
+    <tr><td>MoE variable-M, G=16</td><td><strong>200 µs</strong> (×1.81)</td><td>—</td><td>362 µs</td><td>365 µs</td><td>537 µs</td></tr>
+    <tr><td>MoE variable-M, G=32</td><td><strong>380 µs</strong> (×1.95)</td><td>—</td><td>741 µs</td><td>743 µs</td><td>1.11 ms</td></tr>
+    <tr><td>equal-shape 256×1024×1024, G=8</td><td>39.4 µs (×0.52)</td><td><strong>20.5 µs</strong></td><td>98.4 µs</td><td>98.6 µs</td><td>103 µs</td></tr>
+    <tr><td>equal-shape 512×2048×2048, G=16</td><td>299 µs (×0.98)</td><td><strong>292 µs</strong></td><td>405 µs</td><td>408 µs</td><td>598 µs</td></tr>
+    <tr><td>equal-shape 128×4096×4096, G=32</td><td>784 µs (×0.98)</td><td><strong>765 µs</strong></td><td>1.05 ms</td><td>1.05 ms</td><td>2.61 ms</td></tr>
+    <tr><td>heterogeneous M/K/N, G=8</td><td><strong>67.5 µs</strong> (×1.49)</td><td>—</td><td>101 µs</td><td>101 µs</td><td>109 µs</td></tr>
+    <tr><td>large, compute-bound, G=4</td><td><strong>905 µs</strong> (×1.03)</td><td>1.11 ms</td><td>938 µs</td><td>936 µs</td><td>1.21 ms</td></tr>
+  </tbody>
+</table>
+<p class="caption" style="margin-top:0.4em;">µs, lower is better, bold = fastest · RTX PRO 6000 (sm_120) · the persistent single-launch grouped GEMM already wins the MoE and heterogeneous regime with today's static scheduler, up to 1.95x at G=32, CLC is the lever for the cases it still loses: small equal-shaped batches where <code>bmm</code> wins outright</p>
 
 <hr>
+
+<h3 id="references">References</h3>
+<ol class="references">
+    <li><a href="https://docs.nvidia.com/cuda/cutile-python/">NVIDIA cuTile Python documentation</a></li>
+    <li><a href="https://docs.nvidia.com/cuda/tile-ir/latest/sections/memory_model.html#scopes">Tile IR memory model &#8212; scopes</a>, on <code>weak</code> as the default memory order</li>
+    <li><a href="https://github.com/NVIDIA/cuda-tile/blob/af2417041cc939b87ef56d92cfdcf61737c5457e/include/cuda_tile/Dialect/CudaTile/Transforms/Passes.td">cuda-tile <code>Passes.td</code></a>, the open dialect's own optimizer pass list</li>
+    <li><a href="https://github.com/NVIDIA/cutile-python/blob/9c3ee3ccc504f18bbabf55b0d3e6d398bb21ecc4/src/cuda/tile/_bytecode/type.py#L103">cutile-python <code>_bytecode/type.py</code></a>, the <code>tensor_view</code> definition</li>
+    <li><a href="https://github.com/NVIDIA/cutile-python/blob/9c3ee3ccc504f18bbabf55b0d3e6d398bb21ecc4/src/cuda/tile/_stub.py#L1749">cutile-python <code>_stub.py</code>, <code>atomic_cas</code></a></li>
+    <li><a href="https://github.com/NVIDIA/cutile-python/blob/9c3ee3ccc504f18bbabf55b0d3e6d398bb21ecc4/src/cuda/tile/_stub.py#L1870">cutile-python <code>_stub.py</code>, <code>atomic_xchg</code></a></li>
+    <li><a href="https://llvm.org/devmtg/2026-04/slides/mlir/mlir_springer.pdf">LLVM dev meeting talk on MLIR</a>, on lowering through undocumented backend instructions</li>
+    <li><a href="https://research.colfax-intl.com/">Colfax Research blog</a></li>
+    <li><a href="https://research.colfax-intl.com/cutlass-tutorial-nvfp4-blockscaled-gemm-on-nvidia-rtx-pro-blackwell-gpus-sm12x/">Colfax, CUTLASS tutorial: NVFP4 block-scaled GEMM on RTX PRO Blackwell (sm12x)</a></li>
+    <li><a href="https://www.nvidia.com/content/dam/en-zz/Solutions/design-visualization/quadro-product-literature/NVIDIA-RTX-Blackwell-PRO-GPU-Architecture-v1.0.pdf">NVIDIA RTX Blackwell PRO GPU Architecture datasheet</a></li>
+    <li><a href="https://www.gwern.net/doc/cs/hardware/2014-horowitz-2.pdf">Horowitz, "Computing's Energy Problem (and what we can do about it)," ISSCC 2014</a></li>
+    <li><a href="https://www.cs.toronto.edu/~pekhimenko/courses/csc2224-f19/docs/GPU.pdf">Keckler, Dally, Khailany, Garland, Glasco, "GPUs and the Future of Parallel Computing," IEEE Micro 2011</a></li>
+    <li><a href="https://www.servethehome.com/amd-instinct-mi455x-deep-dive-cdna-5-marks-the-next-era-of-instinct/3/">ServeTheHome, AMD Instinct MI455X deep dive: CDNA 5</a></li>
+    <li><a href="https://github.com/Dao-AILab/quack">Dao-AILab/quack</a>, sm_120 MXFP8 GEMM comparison</li>
+    <li><a href="https://github.com/NVIDIA/cutile-python/issues/12">cutile-python issue #12</a>, NVIDIA on pipelining/warp specialization not being exposed in the DSL</li>
+</ol>
+
   </article>
       </div>
       </div>

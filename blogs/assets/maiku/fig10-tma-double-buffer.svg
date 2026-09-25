@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 300" role="img"
+     aria-label="Two stage TMA double buffering timeline for linear_mxfp8's K-loop. At cycle N, stage 0 is full and being consumed by the tensor core while stage 1 is being filled by TMA. At cycle N+1, the roles swap: stage 1 is now full and consumed while stage 0 is refilled. Each fill is a real UTMALDG.2D issue paired with SYNCS.ARRIVE.TRANS64 marking the stage full, and each consume is gated by SYNCS.PHASECHK.TRANS64.TRYWAIT before the QMMA.SF reads it.">
+  <rect x="0" y="0" width="820" height="300" fill="#12151c"/>
+  <defs>
+    <marker id="f10a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d7dce6"></path>
+    </marker>
+  </defs>
+
+  <text x="24" y="26" font-size="12.5" fill="#d7dce6" fill-opacity="0.75">two SMEM stages, one TMA engine, one tensor-core consumer, K-loop steady state</text>
+
+  <!-- column headers -->
+  <text x="290" y="54" font-size="12.5" fill="#d7dce6" text-anchor="middle" font-weight="bold">K-loop iteration N</text>
+  <text x="610" y="54" font-size="12.5" fill="#d7dce6" text-anchor="middle" font-weight="bold">K-loop iteration N+1</text>
+  <line x1="470" y1="40" x2="470" y2="270" stroke="#7d859a" stroke-opacity="0.35"/>
+
+  <!-- row labels -->
+  <text x="70" y="108" font-size="11.5" fill="#d7dce6" text-anchor="end">stage 0</text>
+  <text x="70" y="200" font-size="11.5" fill="#d7dce6" text-anchor="end">stage 1</text>
+
+  <!-- N: stage 0 = full/consumed (teal), stage 1 = filling (orange) -->
+  <rect x="130" y="82" width="320" height="52" rx="7" fill="#45b5a5" fill-opacity="0.18" stroke="#45b5a5" stroke-width="1.6"/>
+  <text x="290" y="103" font-size="11.5" fill="#45b5a5" text-anchor="middle" font-weight="bold">full — QMMA.SF reads it</text>
+  <text x="290" y="119" font-size="10" fill="#d7dce6" fill-opacity="0.7" text-anchor="middle">gated by SYNCS.PHASECHK.TRANS64.TRYWAIT</text>
+
+  <rect x="130" y="174" width="320" height="52" rx="7" fill="#ed9a3c" fill-opacity="0.16" stroke="#ed9a3c" stroke-width="1.6"/>
+  <text x="290" y="195" font-size="11.5" fill="#ed9a3c" text-anchor="middle" font-weight="bold">filling — UTMALDG.2D in flight</text>
+  <text x="290" y="211" font-size="10" fill="#d7dce6" fill-opacity="0.7" text-anchor="middle">SYNCS.ARRIVE.TRANS64 flips it full on completion</text>
+
+  <!-- N+1: roles swapped -->
+  <rect x="490" y="82" width="300" height="52" rx="7" fill="#ed9a3c" fill-opacity="0.16" stroke="#ed9a3c" stroke-width="1.6"/>
+  <text x="640" y="103" font-size="11.5" fill="#ed9a3c" text-anchor="middle" font-weight="bold">filling — UTMALDG.2D in flight</text>
+  <text x="640" y="119" font-size="10" fill="#d7dce6" fill-opacity="0.7" text-anchor="middle">phase parity flips once this completes</text>
+
+  <rect x="490" y="174" width="300" height="52" rx="7" fill="#45b5a5" fill-opacity="0.18" stroke="#45b5a5" stroke-width="1.6"/>
+  <text x="640" y="195" font-size="11.5" fill="#45b5a5" text-anchor="middle" font-weight="bold">full — QMMA.SF reads it</text>
+  <text x="640" y="211" font-size="10" fill="#d7dce6" fill-opacity="0.7" text-anchor="middle">stage 0 from N is now free to refill</text>
+
+  <!-- swap arrow across the divider -->
+  <line x1="452" y1="108" x2="488" y2="200" stroke="#7d859a" stroke-dasharray="3 3" marker-end="url(#f10a)"/>
+  <line x1="452" y1="200" x2="488" y2="108" stroke="#7d859a" stroke-dasharray="3 3" marker-end="url(#f10a)"/>
+  <text x="470" y="150" font-size="9.5" fill="#7d859a" text-anchor="middle">roles</text>
+  <text x="470" y="162" font-size="9.5" fill="#7d859a" text-anchor="middle">swap</text>
+
+  <text x="24" y="258" font-size="10.5" fill="#d7dce6" fill-opacity="0.7">the tensor core is never blocked waiting on TMA in steady state: one stage is always full while the other refills</text>
+</svg>
